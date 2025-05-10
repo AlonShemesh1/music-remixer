@@ -1,7 +1,6 @@
 import streamlit as st
-from utils.audio_processor1 import load_audio, mix_with_beat, save_audio
+from utils.audio_processor import load_audio, mix_with_beat, save_audio
 import tempfile
-from pathlib import Path
 
 st.title("🎶 Simple Music Remixer")
 
@@ -10,6 +9,15 @@ uploaded_file = st.file_uploader("Upload your song (MP3/WAV)", type=["mp3", "wav
 
 # Genre selection
 genre = st.selectbox("Choose remix style:", ["Reggae", "Hip-Hop", "Rock"])
+
+# Volume control slider
+loop_volume = st.slider(
+    "Set loop beat volume (dB):",
+    min_value=-20,
+    max_value=5,
+    value=-3,
+    help="Adjust how loud the loop beat is mixed with your song."
+)
 
 if uploaded_file:
     st.audio(uploaded_file, format="audio/mp3")
@@ -29,8 +37,8 @@ if uploaded_file:
             # Load beat
             beat = load_audio(beat_file)
             
-            # Mix
-            remixed = mix_with_beat(song, beat)
+            # Mix with user-defined loop volume
+            remixed = mix_with_beat(song, beat, loop_gain_db=loop_volume)
             
             # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
@@ -45,4 +53,3 @@ if uploaded_file:
                     file_name=f"remixed_{uploaded_file.name}",
                     mime="audio/mp3"
                 )
-
