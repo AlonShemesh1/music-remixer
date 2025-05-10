@@ -17,3 +17,19 @@ def mix_with_beat(song, beat, loop_gain_db=-3):
 
 def save_audio(audio_segment, output_path):
     audio_segment.export(output_path, format="mp3")
+
+def plot_volume_envelope(audio_segment, chunk_ms=500, title="Volume Envelope"):
+    loudness = []
+    times = []
+    for i in range(0, len(audio_segment), chunk_ms):
+        chunk = audio_segment[i:i+chunk_ms]
+        loudness.append(chunk.dBFS)
+        times.append(i / 1000)  # seconds
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(times, loudness)
+    plt.title(title)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Volume (dBFS)")
+    plt.tight_layout()
+    return plt
