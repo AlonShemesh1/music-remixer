@@ -1,4 +1,13 @@
 from pydub import AudioSegment
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Maybe missing matplotlib import here
+
+def plot_volume_envelope(...):
+    ...
+    plt.figure(...)
+    plt.plot(...)
 
 def load_audio(file):
     # Auto-detects format
