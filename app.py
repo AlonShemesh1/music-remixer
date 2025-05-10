@@ -1,6 +1,8 @@
 import streamlit as st
 from utils.audio_processor import load_audio, mix_with_beat, save_audio
 import tempfile
+from utils.audio_processor import plot_volume_envelope
+
 
 st.title("🎶 Simple Music Remixer")
 
@@ -53,3 +55,6 @@ if uploaded_file:
                     file_name=f"remixed_{uploaded_file.name}",
                     mime="audio/mp3"
                 )
+# Volume envelope plot
+fig_env = plot_volume_envelope(remixed, title="Remixed Song Volume Over Time")
+st.pyplot(fig_env)
