@@ -37,3 +37,29 @@ def plot_volume_envelope(audio_segment, chunk_ms=500, title="Volume Envelope"):
     plt.ylabel("Volume (dBFS)")
     plt.tight_layout()
     return plt
+def plot_volume_envelope(audio_segment, chunk_ms=500, title="Volume Envelope", cursor_sec=None):
+    loudness = []
+    times = []
+    for i in range(0, len(audio_segment), chunk_ms):
+        chunk = audio_segment[i:i+chunk_ms]
+        loudness.append(chunk.dBFS)
+        times.append(i / 1000)  # seconds
+
+def plot_volume_envelope(audio_segment, chunk_ms=500, title="Volume Envelope", cursor_sec=None):
+    loudness = []
+    times = []
+    for i in range(0, len(audio_segment), chunk_ms):
+        chunk = audio_segment[i:i+chunk_ms]
+        loudness.append(chunk.dBFS)
+        times.append(i / 1000)  # seconds
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(times, loudness, label="Volume (dBFS)")
+    if cursor_sec is not None:
+        plt.axvline(x=cursor_sec, color='r', linestyle='--', label='Cursor')
+    plt.title(title)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Volume (dBFS)")
+    plt.legend()
+    plt.tight_layout()
+    return plt
