@@ -4,11 +4,7 @@ import tempfile
 from utils.audio_processor import plot_volume_envelope
 import matplotlib.pyplot as plt
 
-# Duration of song in seconds
-duration = len(song) / 1000.0
 
-# Let user scrub/select playback position
-playback_position = st.slider("Playback position (seconds)", 0.0, duration, 0.0, step=0.5)
 
 st.title("🎶 Simple Music Remixer")
 
