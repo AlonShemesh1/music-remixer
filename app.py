@@ -1,9 +1,6 @@
 import streamlit as st
 from utils.audio_processor import load_audio, mix_with_beat, save_audio
 import tempfile
-# from utils.audio_processor import plot_volume_envelope
-import matplotlib.pyplot as plt
-
 
 st.title("🎶 Simple Music Remixer")
 
@@ -24,12 +21,7 @@ loop_volume = st.slider(
 
 if uploaded_file:
     st.audio(uploaded_file, format="audio/mp3")
-
-        # Plot volume envelope of uploaded song
-    with st.spinner("Loading volume envelope..."):
-        song = load_audio(uploaded_file)
-
-
+    
     if st.button("Remix it!"):
         with st.spinner("Processing..."):
             # Load user song
