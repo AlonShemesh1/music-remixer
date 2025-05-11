@@ -16,9 +16,9 @@ genre = st.selectbox("Choose remix style:", ["Reggae", "Hip-Hop", "Rock"])
 # Volume control slider
 loop_volume = st.slider(
     "Set loop beat volume (dB):",
-    min_value=-20,
-    max_value=5,
-    value=-3,
+    min_value=0,
+    max_value=30,
+    value=10,
     help="Adjust how loud the loop beat is mixed with your song."
 )
 
@@ -28,8 +28,7 @@ if uploaded_file:
         # Plot volume envelope of uploaded song
     with st.spinner("Loading volume envelope..."):
         song = load_audio(uploaded_file)
-        fig_env = plot_volume_envelope(song, title="Uploaded Song Volume Over Time")
-        st.pyplot(fig_env)
+
 
     if st.button("Remix it!"):
         with st.spinner("Processing..."):
