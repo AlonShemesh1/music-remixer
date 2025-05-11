@@ -5,7 +5,6 @@ from utils.audio_processor import plot_volume_envelope
 import matplotlib.pyplot as plt
 
 
-
 st.title("🎶 Simple Music Remixer")
 
 # File upload
@@ -63,4 +62,3 @@ if uploaded_file:
                     file_name=f"remixed_{uploaded_file.name}",
                     mime="audio/mp3"
                 )
-
