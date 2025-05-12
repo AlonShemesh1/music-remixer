@@ -30,6 +30,11 @@ def plot_volume_envelope(audio):
         samples = samples.mean(axis=1)
 
     window_size = 1000
+    remainder = len(samples) % window_size
+    if remainder != 0:
+        padding = window_size - remainder
+        samples = np.pad(samples, (0, padding), 'constant')
+
     envelope = np.abs(samples).reshape(-1, window_size).mean(axis=1)
     time = np.linspace(0, len(audio) / 1000, num=len(envelope))
 
