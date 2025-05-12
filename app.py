@@ -1,6 +1,16 @@
 import streamlit as st
 import os
 import tempfile
+import librosa
+import numpy as np
+
+def get_chorus_intervals(file_path, sr=22050, k=4):
+    y, _ = librosa.load(file_path, sr=sr)
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    boundaries = librosa.segment.agglomerative(chroma, k=k)
+    times = librosa.frames_to_time(boundaries, sr=sr)
+    return times.tolist()
+
 from utils.audio_processor import (
     load_audio, save_audio, get_chorus_intervals,
     insert_loops, plot_volume_envelope
