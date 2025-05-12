@@ -1,7 +1,9 @@
 from pydub import AudioSegment
-import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
+import streamlit as st
+import librosa
+import io
 
 
 def load_audio(file):
@@ -16,49 +18,83 @@ def plot_volume_envelope(audio):
     samples = np.array(audio.get_array_of_samples())
 
     if audio.channels == 2:
-        samples = samples.reshape((-1, 2)).mean(axis=1)
+        samples = samples.reshape((-1, 2))
+        samples = samples.mean(axis=1)
 
     window_size = 1000
-    num_windows = len(samples) // window_size
-
-    if num_windows == 0:
-        st.warning("Audio too short to show volume plot.")
+    if len(samples) < window_size:
+        st.warning("Audio too short for volume analysis.")
         return
 
-    samples = samples[:num_windows * window_size]
-    envelope = np.abs(samples).reshape(num_windows, window_size).mean(axis=1)
-    time = np.linspace(0, len(audio) / 1000, num=num_windows)
+    remainder = len(samples) % window_size
+    if remainder != 0:
+        padding = window_size - remainder
+        samples = np.pad(samples, (0, padding), 'constant')
 
-    fig, ax = plt.subplots(figsize=(10, 3))
-    ax.plot(time, envelope, color='blue')
-    ax.set_title("Volume Envelope")
+    envelope = np.abs(samples).reshape(-1, window_size).mean(axis=1)
+    time = np.linspace(0, len(audio) / 1000, num=len(envelope))
+
+    fig, ax = plt.subplots()
+    ax.plot(time, envelope)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Amplitude")
+    ax.set_ylabel("Volume")
+    ax.set_title("Volume Envelope")
     st.pyplot(fig)
 
 
-def apply_loops_with_chorus(song, main_loop_path, chorus_loop_path, loop_gain_db=0):
+def detect_chorus_segments(audio):
+    samples = np.array(audio.get_array_of_samples())
+    if audio.channels == 2:
+        samples = samples.reshape((-1, 2))
+        samples = samples.mean(axis=1)
+
+    window_size = 1000
+    if len(samples) < window_size * 2:
+        return []
+
+    remainder = len(samples) % window_size
+    if remainder != 0:
+        samples = np.pad(samples, (0, window_size - remainder), 'constant')
+
+    envelope = np.abs(samples).reshape(-1, window_size).mean(axis=1)
+
+    threshold = envelope.mean() + envelope.std()
+    chorus_indices = np.where(envelope > threshold)[0]
+
+    chorus_segments = []
+    for idx in chorus_indices:
+        start = int((idx * window_size) / audio.frame_rate * 1000)
+        end = start + 4000  # 4 seconds chorus
+        if end > len(audio):
+            end = len(audio)
+        chorus_segments.append((start, end))
+
+    return chorus_segments
+
+
+def apply_loops_with_chorus(audio, main_loop_path, chorus_loop_path, loop_gain_db=0):
     main_loop = AudioSegment.from_file(main_loop_path) + loop_gain_db
     chorus_loop = AudioSegment.from_file(chorus_loop_path) + loop_gain_db
 
-    song_duration = len(song)
+    chorus_segments = detect_chorus_segments(audio)
 
-    # Simulated chorus section (from 30s to 45s)
-    chorus_start = 30_000  # ms
-    chorus_end = 45_000    # ms
+    remixed = AudioSegment.silent(duration=0)
+    last_index = 0
 
-    part1 = song[:chorus_start]
-    part2 = song[chorus_start:chorus_end]
-    part3 = song[chorus_end:]
+    for start, end in chorus_segments:
+        verse_part = audio[last_index:start]
+        chorus_part = audio[start:end]
 
-    loop1 = main_loop * (len(part1) // len(main_loop) + 1)
-    loop2 = chorus_loop * (len(part2) // len(chorus_loop) + 1)
-    loop3 = main_loop * (len(part3) // len(main_loop) + 1)
+        looped_main = (main_loop * (len(verse_part) // len(main_loop) + 1))[:len(verse_part)]
+        looped_chorus = (chorus_loop * (len(chorus_part) // len(chorus_loop) + 1))[:len(chorus_part)]
 
-    remixed = (
-        part1.overlay(loop1[:len(part1)]) +
-        part2.overlay(loop2[:len(part2)]) +
-        part3.overlay(loop3[:len(part3)])
-    )
+        remixed += verse_part.overlay(looped_main)
+        remixed += chorus_part.overlay(looped_chorus)
+        last_index = end
+
+    if last_index < len(audio):
+        remaining = audio[last_index:]
+        looped_main = (main_loop * (len(remaining) // len(main_loop) + 1))[:len(remaining)]
+        remixed += remaining.overlay(looped_main)
 
     return remixed
