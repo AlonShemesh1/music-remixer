@@ -1,71 +1,81 @@
+# app.py
+
 import streamlit as st
-import os
 from utils.audio_processor import (
     load_audio,
     save_audio,
     plot_volume_envelope,
-    apply_loops_with_chorus
+    detect_chorus,
+    apply_loops
 )
+import tempfile
+import os
+from time import sleep
 
-st.set_page_config(page_title="Music Remixer", layout="centered")
-st.title("🎵 AI Music Remixer")
+st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
+st.title("🎵 Music Remixer")
 
-uploaded_file = st.file_uploader("Upload your song (MP3 or WAV)", type=["mp3", "wav"])
-
-style = st.selectbox("Choose remix style", ["Hip-Hop", "Electronic", "Funky"])
-loop_volume = st.slider("Loop volume (dB)", -20, 10, 0)
-
-main_loops = {
-    "Hip-Hop": "beats/hiphop_main.mp3",
-    "Electronic": "beats/electro_main.mp3",
-    "Funky": "beats/funky_main.mp3"
-}
-
-chorus_loops = {
-    "Hip-Hop": "beats/hiphop_chorus.mp3",
-    "Electronic": "beats/electro_chorus.mp3",
-    "Funky": "beats/funky_chorus.mp3"
-}
+uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
+loop_volume = st.slider("Loop Volume (dB)", -20, 10, 0)
 
 if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_input:
+        temp_input.write(uploaded_file.read())
+        song_path = temp_input.name
+
     try:
         st.subheader("Original Song")
-        song = load_audio(uploaded_file)
-        st.audio(uploaded_file)
+        song = load_audio(song_path)
+        st.audio(song_path)
 
         st.subheader("Original Volume Envelope")
         plot_volume_envelope(song)
 
+        main_loops = {
+            "Hip-Hop": "beats/hiphop_main.mp3",
+            "Reggae": "beats/reggae_main.mp3",
+            "Rock": "beats/rock_main.mp3"
+        }
+
+        chorus_loops = {
+            "Hip-Hop": "beats/hiphop_chorus.mp3",
+            "Reggae": "beats/reggae_chorus.mp3",
+            "Rock": "beats/rock_chorus.mp3"
+        }
+
+        main_loop_path = main_loops[style]
+        chorus_loop_path = chorus_loops[style]
+
         if st.button("Remix"):
-            with st.spinner("Remixing in progress..."):
-                progress = st.progress(0)
+            with st.spinner("Detecting chorus and remixing..."):
+                for i in range(1, 101, 10):
+                    sleep(0.1)
+                    st.progress(i)
+                chorus_start, chorus_duration = detect_chorus(song_path)
+                chorus_end = chorus_start + chorus_duration
 
-                main_loop = main_loops[style]
-                chorus_loop = chorus_loops[style]
-
-                remixed = apply_loops_with_chorus(
+                remixed = apply_loops(
                     song,
-                    main_loop_path=main_loop,
-                    chorus_loop_path=chorus_loop,
+                    main_loop_path,
+                    chorus_loop_path,
+                    chorus_start,
+                    chorus_end,
                     loop_gain_db=loop_volume
                 )
 
-                for i in range(100):
-                    progress.progress(i + 1)
-
-                st.success("Remix complete!")
-
-                st.subheader("Remixed Song")
-                os.makedirs("output", exist_ok=True)
-                output_path = os.path.join("output", "remixed_song.mp3")
-                save_audio(remixed, output_path)
-                st.audio(output_path)
-
+                st.success("🎉 Remix complete!")
                 st.subheader("Remixed Volume Envelope")
                 plot_volume_envelope(remixed)
 
-                with open(output_path, "rb") as f:
-                    st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_output:
+                    output_path = temp_output.name
+                    save_audio(remixed, output_path)
+                    st.audio(output_path)
+                    with open(output_path, "rb") as f:
+                        st.download_button("Download Remixed Song", f, "remixed.mp3")
 
     except Exception as e:
         st.error(f"Error processing the file: {e}")
+    finally:
+        os.remove(song_path)
