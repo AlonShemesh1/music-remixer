@@ -1,6 +1,15 @@
 import streamlit as st
 from utils.audio_processor import load_audio, mix_with_beat, save_audio
 import tempfile
+import streamlit as st
+
+# Optional: check if file exists before trying to load it
+import os
+if os.path.exists("piano.jpg"):
+    st.image("piano.jpg", use_container_width=True)
+else:
+    st.warning("Image 'piano.jpg' not found.")
+
 
 st.title("🎶 Simple Music Remixer")
 
