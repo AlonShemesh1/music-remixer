@@ -35,16 +35,25 @@ def plot_volume_envelope(audio):
 
 def detect_chorus(file_path):
     y, sr = librosa.load(file_path)
-    chroma = librosa.feature.chroma_cens(y=y, sr=sr)
-    recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity')
-    sim = librosa.segment.path_enhance(recurrence)
-    segments = librosa.segment.agglomerative(sim, k=2)
-    bounds = librosa.segment.agglomerative(sim, k=4, axis=1)
-    segment_times = librosa.frames_to_time(np.where(np.diff(bounds))[0], sr=sr)
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    similarity = np.dot(chroma.T, chroma)
 
-    if len(segment_times) >= 2:
-        start = int(segment_times[1] * 1000)
-        end = int(segment_times[2] * 1000)
-        return start, end
-    else:
-        return 30000, 50000  # fallback
+    # Find repeated section (naive thresholding)
+    chorus_start = 0
+    chorus_end = 0
+    max_score = 0
+    frame_duration = librosa.frames_to_time(1, sr=sr)
+
+    for i in range(similarity.shape[0] - 50):  # minimum length 50 frames (~2s)
+        for j in range(i + 30, similarity.shape[1] - 50):
+            score = np.sum(similarity[i:i + 50, j:j + 50])
+            if score > max_score:
+                max_score = score
+                chorus_start = i
+                chorus_end = i + 50
+
+    # Convert frame indices to milliseconds
+    start_time = int(librosa.frames_to_time(chorus_start, sr=sr) * 1000)
+    end_time = int(librosa.frames_to_time(chorus_end, sr=sr) * 1000)
+    return start_time, end_time
+
