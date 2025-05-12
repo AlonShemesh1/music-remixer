@@ -72,6 +72,19 @@ if process_button and uploaded_song:
         st.audio(output, format="audio/wav")
         st.success("Done!")
 
+from pydub import AudioSegment
+
+def load_audio(file):
+    return AudioSegment.from_file(file)
+
+def mix_with_beat(song, beat, volume=-10):
+    beat = beat - abs(volume)
+    return song.overlay(beat)
+
+def save_audio(audio, path):
+    audio.export(path, format="mp3")
+
+
         # # גרף
         # y, sr = librosa.load(output)
         # fig, ax = plt.subplots()
