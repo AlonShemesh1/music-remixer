@@ -1,70 +1,54 @@
-# app.py
 import streamlit as st
-import os
 from utils.audio_processor import (
-    load_audio,
-    save_audio,
-    mix_with_loops,
-    detect_chorus,
-    plot_volume_envelope
+    load_audio, save_audio, plot_volume_envelope, apply_loops_with_chorus
 )
+import os
 import tempfile
 
-st.set_page_config(page_title="Music Remixer 🎵", layout="centered")
-st.title("🎧 Auto-Remix Your Song")
+st.set_page_config(page_title="Music Remixer", layout="centered")
+st.title("🎵 Music Remixer")
 
-uploaded_song = st.file_uploader("Upload your song (MP3/WAV)", type=["mp3", "wav"])
-style = st.selectbox("Choose Remix Style", ["Hip-Hop", "Electronic", "Reggae"])
+uploaded_file = st.file_uploader("Upload your song (MP3 or WAV)", type=["mp3", "wav"])
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Electronic", "Funky"])
 loop_volume = st.slider("Loop volume (dB)", -20, 10, 0)
 
-if uploaded_song:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_input:
-        temp_input.write(uploaded_song.read())
-        temp_input_path = temp_input.name
+main_loops = {
+    "Hip-Hop": "beats/hiphop_loop.mp3",
+    "Electronic": "beats/electro_loop.mp3",
+    "Funky": "beats/funky_loop.mp3"
+}
 
-    st.audio(temp_input_path)
+chorus_loops = {
+    "Hip-Hop": "beats/hiphop_chorus.mp3",
+    "Electronic": "beats/electro_chorus.mp3",
+    "Funky": "beats/funky_chorus.mp3"
+}
 
-    loop_paths = {
-        "Hip-Hop": {
-            "main": "beats/hiphop_main.mp3",
-            "chorus": "beats/hiphop_chorus.mp3"
-        },
-        "Electronic": {
-            "main": "beats/electro_main.mp3",
-            "chorus": "beats/electro_chorus.mp3"
-        },
-        "Reggae": {
-            "main": "beats/reggae_main.mp3",
-            "chorus": "beats/reggae_chorus.mp3"
-        }
-    }
+if uploaded_file:
+    st.subheader("Original Song")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_song:
+        temp_song.write(uploaded_file.read())
+        song_path = temp_song.name
 
-    if st.button("🎶 Remix Song"):
-        try:
-            song = load_audio(temp_input_path)
-            chorus_start, chorus_end = detect_chorus(temp_input_path)
-            st.success(f"Chorus detected at {chorus_start / 1000:.2f}s - {chorus_end / 1000:.2f}s")
+    song = load_audio(song_path)
+    st.audio(song_path)
+    plot_volume_envelope(song)
 
-            remixed = mix_with_loops(
+    if st.button("Remix"):
+        with st.spinner("Remixing in progress..."):
+            st.info("Applying loops...")
+            main_loop = main_loops[style]
+            chorus_loop = chorus_loops[style]
+
+            remixed = apply_loops_with_chorus(
                 song,
-                main_loop_path=loop_paths[style]["main"],
-                chorus_loop_path=loop_paths[style]["chorus"],
-                chorus_start=chorus_start,
-                chorus_end=chorus_end,
+                main_loop_path=main_loop,
+                chorus_loop_path=chorus_loop,
                 loop_gain_db=loop_volume
             )
 
-            st.subheader("Volume Envelope")
-            plot_volume_envelope(remixed)
+            progress = st.progress(0)
+            for i in range(100):
+                progress.progress(i + 1)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_output:
-                output_path = temp_output.name
-            save_audio(remixed, output_path)
-
-            st.subheader("Remixed Audio")
-            st.audio(output_path)
-            with open(output_path, "rb") as f:
-                st.download_button("⬇️ Download Remixed Song", f, file_name="remixed.mp3")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
+            st.success("Remix complete
