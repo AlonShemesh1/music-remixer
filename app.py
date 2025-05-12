@@ -42,7 +42,22 @@ if uploaded_file:
                 "Hip-Hop": "beats/hiphop_loop.mp3",
                 "Rock": "beats/rock_loop.mp3"
             }[genre]
-            
+
+            if selected_genre == "Hip-hop":
+    beat_path = "beats/hiphop_beat.mp3"
+elif selected_genre == "Reggae":
+    beat_path = "beats/reggae_beat.mp3"
+elif selected_genre == "Rock":
+    beat_path = "beats/rock_beat.mp3"
+else:
+    beat_path = None
+
+if beat_path:
+    beat = AudioSegment.from_file(beat_path)
+    remixed = mix_with_beat(song, beat, volume=loop_volume)
+    # Then export or play remixed
+
+    
             # Load beat
             beat = load_audio(beat_file)
             
