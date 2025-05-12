@@ -83,6 +83,19 @@ def mix_with_beat(song, beat, loop_gain_db=-10):
 
 def save_audio(audio, path):
     audio.export(path, format="mp3")
+from pydub import AudioSegment
+
+def mix_with_beat(song, beat, volume=-10):
+    beat = beat - abs(volume)  # reduce loop volume
+
+    # Stretch/loop the beat to match song duration
+    if len(beat) > 0 and len(song) > 0:
+        beat_looped = beat * ((len(song) // len(beat)) + 1)
+        beat_looped = beat_looped[:len(song)]
+        return song.overlay(beat_looped)
+    else:
+        print("Beat or song length is zero.")
+        return song
 
 
         # # גרף
