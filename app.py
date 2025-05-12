@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.audio_processor import load_audio, mix_with_beat, save_audio
+from utils.audio_processor.py import load_audio, mix_with_beat, save_audio
 import tempfile
 import streamlit as st
 
