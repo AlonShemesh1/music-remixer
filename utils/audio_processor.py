@@ -3,7 +3,7 @@ from pydub import AudioSegment
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
-import io
+import librosa
 
 
 def load_audio(file):
@@ -43,5 +43,25 @@ def plot_volume_envelope(audio):
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Volume")
     ax.set_title("Volume Envelope")
+
+    st.pyplot(fig)
+
+
+def get_bpm(file):
+    y, sr = librosa.load(file, sr=None)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    return int(tempo)
+
+
+def plot_waveform(file):
+    y, sr = librosa.load(file, sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+    time = np.linspace(0, duration, num=len(y))
+
+    fig, ax = plt.subplots()
+    ax.plot(time, y, linewidth=0.5)
+    ax.set_title("Waveform")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Amplitude")
 
     st.pyplot(fig)
