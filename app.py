@@ -51,4 +51,22 @@ if uploaded_file:
             for i in range(100):
                 progress.progress(i + 1)
 
+            st.success("Remix complete!")  # ✅ fixed this line
+
+            st.subheader("Remixed Song")
+            output_path = os.path.join("output", "remixed_song.mp3")
+            os.makedirs("output", exist_ok=True)
+            save_audio(remixed, output_path)
+            st.audio(output_path)
+            plot_volume_envelope(remixed)
+
+            with open(output_path, "rb") as f:
+                st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
+
+            )
+
+            progress = st.progress(0)
+            for i in range(100):
+                progress.progress(i + 1)
+
             st.success("Remix complete
