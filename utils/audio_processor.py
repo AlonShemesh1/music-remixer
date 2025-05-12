@@ -10,7 +10,8 @@ from io import BytesIO
 # UI בסיסי
 st.set_page_config(layout="wide", page_title="Music Transformer", page_icon="🎵")
 st.markdown("<h1 style='text-align: center;'>🎶 Transform Your Song Into a New Genre</h1>", unsafe_allow_html=True)
-st.image("piano.jpg", use_column_width=True)
+st.image("piano.jpg", use_container_width=True)
+
 
 uploaded_song = st.file_uploader("Upload your song", type=["mp3", "wav"])
 genres = {
