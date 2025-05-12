@@ -1,9 +1,7 @@
-# utils/audio_processor.py
 from pydub import AudioSegment
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
-import io
 
 
 def load_audio(file):
@@ -26,14 +24,12 @@ def save_audio(audio_segment, path):
 def plot_volume_envelope(audio):
     samples = np.array(audio.get_array_of_samples())
     if audio.channels == 2:
-        samples = samples.reshape((-1, 2))
-        samples = samples.mean(axis=1)
+        samples = samples.reshape((-1, 2)).mean(axis=1)
 
     window_size = 1000
     remainder = len(samples) % window_size
     if remainder != 0:
-        padding = window_size - remainder
-        samples = np.pad(samples, (0, padding), 'constant')
+        samples = np.pad(samples, (0, window_size - remainder), 'constant')
 
     envelope = np.abs(samples).reshape(-1, window_size).mean(axis=1)
     time = np.linspace(0, len(audio) / 1000, num=len(envelope))
