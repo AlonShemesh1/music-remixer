@@ -23,4 +23,33 @@ if uploaded_file:
         bpm = get_bpm(song_path)
         st.write(f"Detected BPM: {bpm}")
 
-        style
+        style = st.selectbox("Select Loop Style", ["Hip-Hop", "Electronic", "Funky"])
+        loop_file_map = {
+            "Hip-Hop": "beats/hiphop_beat.mp3",
+            "Electronic": "beats/electro_beat.mp3",
+            "Funky": "beats/funky_beat.mp3"
+        }
+
+        beat_path = loop_file_map[style]
+        beat_bpm = 100  # adjust to match your beat's original BPM
+
+        remixed = mix_with_beat(song, beat_path, bpm, beat_bpm, loop_gain_db=loop_volume)
+
+        st.subheader("Volume Envelope")
+        plot_volume_envelope(remixed)
+
+        st.subheader("Remixed Song")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_output:
+            output_path = temp_output.name
+        save_audio(remixed, output_path)
+        st.audio(output_path)
+
+        with open(output_path, "rb") as f:
+            st.download_button("Download Remixed Song", f, file_name="remixed.mp3")
+
+    except Exception as e:
+        st.error(f"Error processing the file: {e}")
+    finally:
+        os.remove(song_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
