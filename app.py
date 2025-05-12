@@ -1,56 +1,82 @@
+# app.py
 import streamlit as st
 from utils.audio_processor import (
-    load_audio, save_audio, mix_with_beat, get_bpm, plot_volume_envelope
+    load_audio,
+    mix_with_beat,
+    save_audio,
+    plot_volume_envelope
 )
-import tempfile
+
+st.set_page_config(page_title="Music Remixer")
+st.title("🎵 Music Remixer")
+from utils.audio_processor import load_audio, mix_with_beat, save_audio, plot_volume_envelope
 import os
 
+st.set_page_config(page_title="Music Remixer", layout="centered")
+
+uploaded_file = st.file_uploader("Upload your song (MP3 or WAV)", type=["mp3", "wav"])
 st.title("🎵 Music Remixer")
 
-uploaded_file = st.file_uploader("Upload a song", type=["mp3", "wav"])
-loop_volume = st.slider("Loop Volume (dB)", -20, 10, 0)
+style = st.selectbox("Select a beat style to add:", ["hiphop", "rock", "reggae"])
+loop_volume = st.slider("Loop Volume (dB)", min_value=-20, max_value=10, value=0)
+uploaded_file = st.file_uploader("Upload a WAV or MP3 file", type=["wav", "mp3"])
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
+loop_volume = st.slider("Loop volume (dB)", -20, 10, 0)
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_song:
-        temp_song.write(uploaded_file.read())
-        song_path = temp_song.name
-
+if uploaded_file is not None:
     try:
-        st.subheader("Original Song")
-        song = load_audio(song_path)
-        st.audio(song_path)
+        song = load_audio(uploaded_file)
+        st.audio(uploaded_file)
+        st.success("Original audio loaded successfully!")
+        st.audio(uploaded_file, format="audio/mp3")
 
-        bpm = get_bpm(song_path)
-        st.write(f"Detected BPM: {bpm}")
+        # Show volume envelope of original song
+        st.subheader("Original Song Volume Envelope")
+        # Show volume envelope
+        st.subheader("Original Audio Volume Envelope")
+        plot_volume_envelope(song)
 
-        style
-        style = st.selectbox("Select Loop Style", ["Hip-Hop", "Electronic", "Funky"])
-        loop_file_map = {
-            "Hip-Hop": "beats/hiphop_beat.mp3",
-            "Electronic": "beats/electro_beat.mp3",
-            "Funky": "beats/funky_beat.mp3"
-        }
+        # Choose beat path
+        if style == "Hip-Hop":
+            beat_path = "beats/hiphop_loop.mp3"
+        elif style == "Reggae":
+            beat_path = "beats/reggae_loop.mp3"
+        elif style == "Rock":
+            beat_path = "beats/rock_loop.mp3"
+    except Exception as e:
+    st.error(f"Error: {e}")
 
-        beat_path = loop_file_map[style]
-        beat_bpm = 100  # adjust to match your beat's original BPM
 
-        remixed = mix_with_beat(song, beat_path, bpm, beat_bpm, loop_gain_db=loop_volume)
 
-        st.subheader("Volume Envelope")
-        plot_volume_envelope(remixed)
 
-        st.subheader("Remixed Song")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_output:
-            output_path = temp_output.name
-        save_audio(remixed, output_path)
-        st.audio(output_path)
+        if st.button("Remix it!"):
+            remixed = mix_with_beat(song, beat_path, loop_gain_db=loop_volume)
+            output_path = "output/remixed_song.mp3"
+            save_audio(remixed, output_path)
 
-        with open(output_path, "rb") as f:
-            st.download_button("Download Remixed Song", f, file_name="remixed.mp3")
+            st.success("Remix complete!")
+            audio_file = open(output_path, "rb")
+            st.audio(audio_file.read(), format="audio/mp3")
 
+        else:
+            st.error("Unknown style selected.")
+            beat_path = None
+
+        # Process the remix
+        if beat_path and os.path.exists(beat_path):
+            if st.button("Remix it!"):
+                remixed = mix_with_beat(song, beat_path, loop_gain_db=loop_volume)
+                output_path = "output/remixed_song.mp3"
+                os.makedirs("output", exist_ok=True)
+                save_audio(remixed, output_path)
+
+                st.success("🎉 Remix complete!")
+                st.audio(output_path, format="audio/mp3")
+
+                st.subheader("Remixed Volume Envelope")
+                plot_volume_envelope(remixed)
+        else:
+            st.error(f"Loop file not found: {beat_path}")
     except Exception as e:
         st.error(f"Error processing the file: {e}")
-    finally:
-        os.remove(song_path)
-        if os.path.exists(output_path):
-            os.remove(output_path)
