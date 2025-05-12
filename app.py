@@ -23,6 +23,7 @@ if uploaded_file:
         bpm = get_bpm(song_path)
         st.write(f"Detected BPM: {bpm}")
 
+        style
         style = st.selectbox("Select Loop Style", ["Hip-Hop", "Electronic", "Funky"])
         loop_file_map = {
             "Hip-Hop": "beats/hiphop_beat.mp3",
