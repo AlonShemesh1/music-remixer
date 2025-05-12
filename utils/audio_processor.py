@@ -77,8 +77,8 @@ from pydub import AudioSegment
 def load_audio(file):
     return AudioSegment.from_file(file)
 
-def mix_with_beat(song, beat, volume=-10):
-    beat = beat - abs(volume)
+def mix_with_beat(song, beat, loop_gain_db=-10):
+    beat = beat - abs(loop_gain_db)
     return song.overlay(beat)
 
 def save_audio(audio, path):
