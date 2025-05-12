@@ -24,12 +24,16 @@ if uploaded_file:
         st.subheader("Original Song Volume Envelope")
         plot_volume_envelope(song)
 
-    if style == "Hip-Hop":
-    beat_path = "beats/hiphop_loop.mp3"
-elif style == "Reggae":
-    beat_path = "beats/reggae_loop.mp3"
-elif style == "Rock":
-    beat_path = "beats/rock_loop.mp3"
+        if style == "Hip-Hop":
+            beat_path = "beats/hiphop_loop.mp3"
+        elif style == "Reggae":
+            beat_path = "beats/reggae_loop.mp3"
+        elif style == "Rock":
+            beat_path = "beats/rock_loop.mp3"
+    except Exception as e:
+    st.error(f"Error: {e}")
+
+
 
 
         if st.button("Remix it!"):
