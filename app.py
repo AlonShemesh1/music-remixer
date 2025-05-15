@@ -1,65 +1,61 @@
 import streamlit as st
 import os
-from utils.audio_processor import (
-    load_audio,
-    save_audio,
-    mix_with_beats_and_chorus,
-    plot_volume_envelope_with_chorus,
-    detect_chorus_intervals
-)
-from pydub import AudioSegment
-import tempfile
 import time
+from utils.audio_processor import (
+    detect_chorus,
+    apply_remix,
+    plot_volume_envelope_with_chorus
+)
 
-st.set_page_config(page_title="🎧 Music Remixer", layout="centered")
-st.title("🎵 Music Remixer")
+st.set_page_config(page_title="Music Remixer", layout="wide")
 
-# File upload
-uploaded_file = st.file_uploader("Upload your song (MP3 or WAV)", type=["mp3", "wav"])
+st.title("🎶 AI Music Remixer")
+st.markdown("Upload a song and choose a remix style. The app will detect the chorus and apply a different beat loop there.")
 
-# Style selection
-style = st.selectbox("Choose a remix style:", ["Hip-Hop", "Reggae", "Rock"])
-loop_volume = st.slider("Loop volume (dB)", min_value=-20, max_value=10, value=0)
+uploaded_file = st.file_uploader("Upload your song (MP3 format)", type=["mp3"])
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
+
+# File paths for beats
+main_loop_path = f"beats/{style.lower()}_main.mp3"
+chorus_loop_path = f"beats/{style.lower()}_chorus.mp3"
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-        temp_file.write(uploaded_file.read())
-        song_path = temp_file.name
+    song_path = f"uploaded_{uploaded_file.name}"
+    with open(song_path, "wb") as f:
+        f.write(uploaded_file.read())
+    st.audio(song_path, format="audio/mp3")
 
+    # Detect chorus and show volume envelope immediately
     try:
-        song = load_audio(song_path)
-        st.audio(song_path)
-
-        st.subheader("🔊 Original Audio Volume Envelope")
-        chorus_intervals = detect_chorus_intervals(song_path)
-        plot_volume_envelope_with_chorus(song, chorus_intervals)
-
-        # Map style to loop paths
-        style_key = style.lower()
-        main_loop_path = f"beats/{style_key}_main.mp3"
-        chorus_loop_path = f"beats/{style_key}_chorus.mp3"
-
-        if not os.path.exists(main_loop_path) or not os.path.exists(chorus_loop_path):
-            st.error(f"Missing loop files for {style} style.")
-        else:
-            if st.button("🎛 Remix It!"):
-                with st.spinner("Remixing in progress..."):
-                    progress_bar = st.progress(0)
-                    for i in range(5):
-                        time.sleep(0.3)
-                        progress_bar.progress((i + 1) * 20)
-
-                    remixed = mix_with_beats_and_chorus(song, main_loop_path, chorus_loop_path, chorus_intervals, loop_volume)
-
-                    os.makedirs("output", exist_ok=True)
-                    output_path = "output/remixed_song.mp3"
-                    save_audio(remixed, output_path)
-
-                    st.success("✅ Remix complete!")
-                    st.audio(output_path, format="audio/mp3")
-
-                    st.subheader("🎨 Remixed Volume Envelope")
-                    plot_volume_envelope_with_chorus(remixed, chorus_intervals)
-
+        st.subheader("🔊 Volume Envelope with Chorus Highlighted")
+        chorus_times = detect_chorus(song_path)
+        fig = plot_volume_envelope_with_chorus(song_path, chorus_times)
+        st.pyplot(fig)
     except Exception as e:
-        st.error(f"Error processing the file: {e}")
+        st.error(f"Error analyzing the audio: {e}")
+        chorus_times = []
+
+    # Remix button
+    if st.button("🎛 Remix It!"):
+        if not os.path.exists(main_loop_path) or not os.path.exists(chorus_loop_path):
+            st.error("Loop files missing for this style.")
+        else:
+            with st.spinner("Remixing..."):
+                progress = st.progress(0, text="Starting remix...")
+
+                for i in range(5):
+                    time.sleep(0.4)
+                    progress.progress((i + 1) * 20, text=f"Processing {20*(i+1)}%")
+
+                try:
+                    remixed_path = apply_remix(
+                        song_path,
+                        main_loop_path,
+                        chorus_loop_path,
+                        chorus_times
+                    )
+                    st.success("✅ Remix complete!")
+                    st.audio(remixed_path, format="audio/mp3")
+
+                except Exception as e:
+                    st.error(f"Error during remix: {e}")
