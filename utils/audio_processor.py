@@ -4,6 +4,8 @@ import librosa
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
+import streamlit as st
+
 
 def get_volume_envelope(path, sr):
     y, _ = librosa.load(path, sr=sr)
