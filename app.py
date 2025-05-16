@@ -1,71 +1,39 @@
+# app.py
 import streamlit as st
 import os
-from pydub import AudioSegment
-
 from utils.audio_processor import (
-    load_audio,
-    mix_with_beat,
-    save_audio,
-    plot_volume_envelope
+    get_volume_envelope,
+    get_chorus_intervals,
+    process_audio,
+    plot_envelope_with_chorus
 )
 
-st.set_page_config(page_title="🎵 Dual Loop Remixer", layout="centered")
-st.title("🎵 Dual Loop Remixer")
+st.set_page_config(page_title="Music Remixer", layout="wide")
+st.title("🎵 Music Remixer App")
 
-# Upload
-uploaded_file = st.file_uploader("Upload your full song (MP3/WAV)", type=["mp3", "wav"])
-style = st.selectbox("Select remix style", ["Hip-Hop", "Reggae", "Rock"])
-loop_volume = st.slider("Loop volume (dB)", -20, 10, 0)
+uploaded_file = st.file_uploader("Upload a song (MP3)", type=["mp3"])
+style = st.selectbox("Choose a remix style", ["Hip-Hop", "Reggae", "Rock"])
 
 if uploaded_file:
-    try:
-        # Load song
-        song = load_audio(uploaded_file)
-        st.audio(uploaded_file, format="audio/mp3")
-        st.success("✅ Song loaded successfully!")
+    with open(f"uploads/{uploaded_file.name}", "wb") as f:
+        f.write(uploaded_file.getbuffer())
 
-        # Segment song
-        duration_ms = len(song)
-        ditty_duration = 10000  # First 10 seconds
-        house_duration = 10000  # Last 10 seconds
+    song_path = f"uploads/{uploaded_file.name}"
+    st.audio(song_path)
 
-        if duration_ms < (ditty_duration + house_duration):
-            st.error("Song must be at least 20 seconds long to apply both loops.")
-        else:
-            intro = song[:ditty_duration]
-            middle = song[ditty_duration:-house_duration]
-            outro = song[-house_duration:]
+    sr = 22050
+    envelope = get_volume_envelope(song_path, sr)
+    chorus_times = get_chorus_intervals(song_path)
 
-            # Loop paths
-            style_key = style.lower().replace("-", "")
-            ditty_path = f"beats/{style_key}_ditty_loop.mp3"
-            house_path = f"beats/{style_key}_house_loop.mp3"
+    st.subheader("🔍 Original Volume Envelope")
+    plot_envelope_with_chorus(envelope, sr, chorus_times, title="Original Envelope")
 
-            # Check if loop files exist
-            if not os.path.exists(ditty_path):
-                st.error(f"Missing Ditty loop: {ditty_path}")
-            elif not os.path.exists(house_path):
-                st.error(f"Missing House loop: {house_path}")
-            else:
-                # Remix intro and outro
-                remixed_intro = mix_with_beat(intro, ditty_path, loop_gain_db=loop_volume)
-                remixed_outro = mix_with_beat(outro, house_path, loop_gain_db=loop_volume)
+    if st.button("🎛 Remix"):
+        with st.spinner("Processing remix..."):
+            audio_output_path, envelope_after = process_audio(song_path, style, chorus_times)
 
-                # Combine segments
-                final_mix = remixed_intro + middle + remixed_outro
+        st.success("Remix complete!")
+        st.audio(audio_output_path)
 
-                # Save and output
-                os.makedirs("output", exist_ok=True)
-                output_path = "output/remixed_song.mp3"
-                save_audio(final_mix, output_path)
-
-                st.success("🎉 Remix complete!")
-                st.audio(output_path, format="audio/mp3")
-                st.download_button("Download Remixed Song", open(output_path, "rb"), file_name="remixed_song.mp3")
-
-                # Show volume envelope
-                st.subheader("Volume Envelope")
-                plot_volume_envelope(final_mix)
-
-    except Exception as e:
-        st.error(f"Something went wrong: {e}")
+        st.subheader("🎚 Remixed Volume Envelope")
+        plot_envelope_with_chorus(envelope_after, sr, chorus_times, title="Remixed Envelope")
