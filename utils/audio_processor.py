@@ -1,82 +1,66 @@
+# utils/audio_processor.py
+import os
 import librosa
 import numpy as np
-import matplotlib.pyplot as plt
-import streamlit as st
 import soundfile as sf
-import os
+import matplotlib.pyplot as plt
 
-def get_volume_envelope(path, sr=22050):
+def get_volume_envelope(path, sr):
     y, _ = librosa.load(path, sr=sr)
-    hop_length = 512
-    envelope = np.abs(librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length))
+    envelope = np.abs(librosa.onset.onset_strength(y=y, sr=sr))
     return envelope
 
-def get_chorus_intervals(path, sr=22050):
-    y, _ = librosa.load(path, sr=sr)
+def get_chorus_intervals(path):
+    y, sr = librosa.load(path)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
-    if len(beats) < 2:
-        return []  # אם אין מספיק ביטים
-
-    # חיתוך לאזור הביטים
-    y_sync = librosa.util.sync(y, beats, aggregate=np.median)
-    segments = librosa.segment.agglomerative(y_sync, k=4)
-
-    # ודא שאורך הסגמנטים תואם לביטים
-    segments = segments[:len(beats)]
-
-    # מצא את הקלאסטר שמופיע הכי הרבה
-    chorus_cluster = np.argmax(np.bincount(segments))
     beat_times = librosa.frames_to_time(beats, sr=sr)
-
-    chorus_times = [
-        (beat_times[i], beat_times[i+1])
-        for i in range(len(beat_times)-1)
-        if i < len(segments) and segments[i] == chorus_cluster
-    ]
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    from sklearn.cluster import KMeans
+    segments = KMeans(n_clusters=2, random_state=0).fit_predict(chroma.T[beats])
+    chorus_cluster = max(set(segments), key=list(segments).count)
+    chorus_times = [(beat_times[i], beat_times[i+1]) for i in range(len(beats)-1) if segments[i] == chorus_cluster]
     return chorus_times
 
-
-def plot_envelope_with_chorus(envelope, sr, chorus_times, title="Envelope"):
-    fig, ax = plt.subplots(figsize=(12, 3))
-    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=512)
-    ax.plot(times, envelope, color='white', label="Volume Envelope")
+def plot_envelope_with_chorus(envelope, sr, chorus_times, title="Volume Envelope"):
+    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr)
+    plt.figure(figsize=(10, 4))
+    plt.plot(times, envelope, label='Volume Envelope')
     for start, end in chorus_times:
-        ax.axvspan(start, end, color='magenta', alpha=0.3)
-    ax.set_title(title, color='white')
-    ax.set_xlabel("Time (s)", color='white')
-    ax.set_ylabel("Amplitude", color='white')
-    ax.tick_params(colors='white')
-    fig.patch.set_facecolor('#0E1117')
-    ax.set_facecolor('#0E1117')
-    st.pyplot(fig)
-def process_audio(song_path, style, chorus_times, sr=22050, loops_dir="beats"):
-    loop_main_path = os.path.join(loops_dir, f"{style}_main.mp3")
-    loop_chorus_path = os.path.join(loops_dir, f"{style}_chorus.mp3")
+        plt.axvspan(start, end, color='red', alpha=0.3)
+    plt.title(title)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Volume")
+    plt.tight_layout()
+    st.pyplot(plt.gcf())
+    plt.close()
+
+def process_audio(song_path, style, chorus_times, loops_dir="beats"):
+    y, sr = librosa.load(song_path, sr=None)
+    output = np.zeros_like(y)
+
+    loop_main_path = os.path.join(loops_dir, f"{style.lower()}_main.wav")
+    loop_chorus_path = os.path.join(loops_dir, f"{style.lower()}_chorus.wav")
 
     loop_main, _ = librosa.load(loop_main_path, sr=sr)
     loop_chorus, _ = librosa.load(loop_chorus_path, sr=sr)
 
-    # המשך הקוד שלך...
+    beat_frames = librosa.beat.beat_track(y=y, sr=sr)[1]
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
+    is_chorus = np.zeros(len(beat_times), dtype=bool)
+    for i, t in enumerate(beat_times):
+        for start, end in chorus_times:
+            if start <= t <= end:
+                is_chorus[i] = True
 
-    output = np.zeros_like(y)
-    segment_length = len(loop_main)
+    for i, t in enumerate(beat_times[:-1]):
+        start_sample = int(t * sr)
+        end_sample = int(beat_times[i+1] * sr)
+        loop = loop_chorus if is_chorus[i] else loop_main
+        segment = librosa.util.fix_length(loop, end_sample - start_sample)
+        output[start_sample:end_sample] += segment
 
-    for i in range(0, len(y), segment_length):
-        segment_start = i
-        segment_end = min(i + segment_length, len(y))
-        segment_time = segment_start / sr
-
-        is_chorus = any(start <= segment_time <= end for start, end in chorus_times)
-        loop = loop_chorus if is_chorus else loop_main
-
-        loop_trimmed = loop[:segment_end - segment_start]
-        output[segment_start:segment_end] = y[segment_start:segment_end] + loop_trimmed
-
-    output = output / np.max(np.abs(output))
-    out_path = f"output/remixed_{os.path.basename(song_path)}"
-    os.makedirs("output", exist_ok=True)
-    sf.write(out_path, output, sr)
-
-    envelope = get_volume_envelope(out_path, sr)
-    return out_path, envelope
+    output_path = "remixed_output.wav"
+    sf.write(output_path, output, sr)
+    envelope = np.abs(librosa.onset.onset_strength(y=output, sr=sr))
+    return output_path, envelope
