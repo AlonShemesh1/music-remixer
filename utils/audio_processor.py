@@ -1,88 +1,62 @@
+# utils/audio_processor.py
+
 import librosa
-import librosa.display
-import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
-import tempfile
-import os
-from pydub import AudioSegment
-import streamlit as st
 
-def get_volume_envelope(audio_path):
-    y, sr = librosa.load(audio_path)
-    frame_length = 2048
-    hop_length = 512
-    envelope = np.array([
-        np.max(np.abs(y[i:i+frame_length]))
-        for i in range(0, len(y), hop_length)
-    ])
-    return envelope, sr
+def get_volume_envelope(audio_path, hop_length=512):
+    y, sr = librosa.load(audio_path, sr=None)
+    envelope = np.abs(librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length))
+    return envelope
 
 def get_chorus_intervals(audio_path):
-    y, sr = librosa.load(audio_path)
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    similarity = np.dot(chroma.T, chroma)
-    lag = librosa.segment.recurrence_to_lag(similarity)
-    boundaries = librosa.segment.agglomerative(similarity, k=4)
-    durations = librosa.frames_to_time(boundaries, sr=sr)
-    if len(durations) >= 2:
-        return [(durations[1], durations[2])]
+    y, sr = librosa.load(audio_path, sr=None)
+    S = np.abs(librosa.stft(y))
+    S_db = librosa.amplitude_to_db(S, ref=np.max)
+    segments = librosa.segment.agglomerative(S_db, k=4)
+    boundaries = librosa.segment.agglomerative(S_db, k=4, axis=-1)
+    segment_times = librosa.frames_to_time(boundaries, sr=sr)
+    chorus_times = [(segment_times[i], segment_times[i+1]) for i in range(1, len(segment_times)-1, 2)]
+    return chorus_times
+
+def process_audio(audio_path, style, chorus_times):
+    y, sr = librosa.load(audio_path, sr=None)
+
+    if style == "Hip-Hop":
+        loop_path = "/mnt/data/hiphop_chorus.mp3"
+    elif style == "Reggae":
+        loop_path = "/mnt/data/reggae_chorus.mp3"
+    elif style == "Rock":
+        loop_path = "/mnt/data/rock_chorus.mp3"
     else:
-        return []
+        loop_path = None
 
-def remix_song_with_chorus_loop(song_path, main_loop_path, chorus_loop_path, chorus_intervals):
-    original = AudioSegment.from_file(song_path)
-    main_loop = AudioSegment.from_file(main_loop_path)
-    chorus_loop = AudioSegment.from_file(chorus_loop_path)
+    if loop_path:
+        loop_audio, _ = librosa.load(loop_path, sr=sr)
 
-    output = AudioSegment.silent(duration=0)
-    cursor = 0
+    for start, end in chorus_times:
+        start_sample = int(start * sr)
+        end_sample = int(end * sr)
+        segment_len = end_sample - start_sample
+        loop_segment = np.tile(loop_audio, int(np.ceil(segment_len / len(loop_audio))))[:segment_len]
+        y[start_sample:end_sample] = loop_segment
 
-    for start_sec, end_sec in chorus_intervals:
-        start_ms = int(start_sec * 1000)
-        end_ms = int(end_sec * 1000)
+    output_path = "/mnt/data/remixed_output.mp3"
+    sf.write(output_path, y, sr)
 
-        # Add main loop until chorus
-        segment = original[cursor:start_ms]
-        looped = loop_audio(main_loop, len(segment))
-        output += mix_loops(segment, looped)
+    envelope = get_volume_envelope(output_path)
+    return output_path, envelope
 
-        # Add chorus loop
-        chorus_seg = original[start_ms:end_ms]
-        chorus_looped = loop_audio(chorus_loop, len(chorus_seg))
-        output += mix_loops(chorus_seg, chorus_looped)
+def plot_envelope_with_chorus(envelope, chorus_times, hop_length=512, sr=22050):
+    import matplotlib.pyplot as plt
 
-        cursor = end_ms
-
-    # Add remaining part
-    if cursor < len(original):
-        segment = original[cursor:]
-        looped = loop_audio(main_loop, len(segment))
-        output += mix_loops(segment, looped)
-
-    output_path = os.path.join(tempfile.gettempdir(), "remixed_output.mp3")
-    output.export(output_path, format="mp3")
-    return output_path
-
-def loop_audio(loop, duration_ms):
-    looped = AudioSegment.silent(duration=0)
-    while len(looped) < duration_ms:
-        looped += loop
-    return looped[:duration_ms]
-
-def mix_loops(original, looped):
-    return original.overlay(looped)
-
-def plot_volume_envelope(envelope, sr, chorus_intervals, title="Volume Envelope"):
+    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=hop_length)
     fig, ax = plt.subplots(figsize=(10, 4))
-    times = np.linspace(0, len(envelope) * 512 / sr, num=len(envelope))
-    ax.plot(times, envelope, label="Volume", color="gray")
-
-    for start, end in chorus_intervals:
-        ax.axvspan(start, end, color='orange', alpha=0.4, label='Chorus')
-
-    ax.set_title(title)
+    ax.plot(times, envelope, label='Volume Envelope', color='blue')
+    for start, end in chorus_times:
+        ax.axvspan(start, end, color='orange', alpha=0.3, label='Chorus')
+    ax.set_title("Volume Envelope with Chorus Highlighted")
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Volume")
+    ax.set_ylabel("Amplitude")
     ax.legend()
-    st.pyplot(fig)
+    return fig
