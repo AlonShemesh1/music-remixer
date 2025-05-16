@@ -15,13 +15,11 @@ st.markdown("""
         .main { background-color: #ffffff; }
         .stButton>button {
             color: white;
-            background-color: #4CAF50;
             font-size: 18px;
             padding: 10px 24px;
             border-radius: 12px;
         }
         .stProgress > div > div {
-            background-color: #4CAF50;
         }
     </style>
 """, unsafe_allow_html=True)
