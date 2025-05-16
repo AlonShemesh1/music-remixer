@@ -1,61 +1,75 @@
-import librosa
-import numpy as np
-import soundfile as sf
-import matplotlib.pyplot as plt
 import streamlit as st
+import os
+import tempfile
+from utils.audio_processor import (
+    load_audio,
+    save_audio,
+    get_chorus_intervals,
+    insert_loops,
+    mix_with_chorus_loop,
+    get_bpm,
+    plot_volume_envelope
+)
 
-def load_audio(path, sr=22050):
-    y, _ = librosa.load(path, sr=sr)
-    return y
+st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
+st.title("🎵 Music Remixer with Chorus Detection")
 
-def save_audio(y, path, sr=22050):
-    sf.write(path, y, sr)
+uploaded_file = st.file_uploader("Upload your song (MP3 or WAV)", type=["mp3", "wav"])
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
+loop_volume = st.slider("Loop Volume (dB)", -20, 10, 0)
 
-def get_bpm(path, sr=22050):
-    y, _ = librosa.load(path, sr=sr)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    return int(tempo)
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        tmp.write(uploaded_file.read())
+        song_path = tmp.name
 
-def get_chorus_intervals(path, sr=22050, k=4):
-    y, _ = librosa.load(path, sr=sr)
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    boundaries = librosa.segment.agglomerative(chroma, k=k)
-    times = librosa.frames_to_time(boundaries, sr=sr)
-    return [(times[i], times[i+1]) for i in range(len(times)-1)]
+    # Load original audio
+    song = load_audio(song_path)
+    st.audio(song_path)
+    st.subheader("Original Volume Envelope")
+    plot_volume_envelope(song, title="Original Song", chorus_times=[])
 
-def mix_with_chorus_loop(song_path, main_loop_path, chorus_loop_path, chorus_times, bpm, volume_db, sr=22050):
-    y, _ = librosa.load(song_path, sr=sr)
-    loop_main, _ = librosa.load(main_loop_path, sr=sr)
-    loop_chorus, _ = librosa.load(chorus_loop_path, sr=sr)
+    # Set loop paths
+    loop_paths = {
+        "Hip-Hop": {
+            "main": "beats/hiphop_main.mp3",
+            "chorus": "beats/hiphop_chorus.mp3"
+        },
+        "Reggae": {
+            "main": "beats/reggae_main.mp3",
+            "chorus": "beats/reggae_chorus.mp3"
+        },
+        "Rock": {
+            "main": "beats/rock_main.mp3",
+            "chorus": "beats/rock_chorus.mp3"
+        }
+    }
 
-    output = np.copy(y)
-    gain = 10 ** (volume_db / 20.0)
+    main_path = loop_paths[style]["main"]
+    chorus_path = loop_paths[style]["chorus"]
 
-    # הוספת הלופ לפזמון
-    for start, end in chorus_times:
-        start_sample = int(start * sr)
-        end_sample = int(end * sr)
-        loop = np.tile(loop_chorus, int(np.ceil((end_sample - start_sample) / len(loop_chorus))))
-        loop = loop[:end_sample - start_sample]
-        output[start_sample:end_sample] += gain * loop
+    if not os.path.exists(main_path) or not os.path.exists(chorus_path):
+        st.error(f"Missing loop files for {style}")
+    else:
+        if st.button("Remix"):
+            with st.spinner("Detecting chorus and applying loops..."):
+                bpm = get_bpm(song_path)
+                st.write(f"Detected BPM: {bpm}")
 
-    # הוספת הלופ הכללי לשאר השיר
-    full_loop = np.tile(loop_main, int(np.ceil(len(y) / len(loop_main))))
-    full_loop = full_loop[:len(y)]
-    output += gain * full_loop
+                chorus_times = get_chorus_intervals(song_path)
+                st.write("Chorus sections:", chorus_times)
 
-    return output
+                remixed = mix_with_chorus_loop(song, main_path, chorus_path, chorus_times, bpm, loop_volume)
 
-def plot_volume_envelope(y, sr=22050):
-    hop_length = 512
-    envelope = np.abs(librosa.stft(y, hop_length=hop_length)).mean(axis=0)
-    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=hop_length)
+                st.success("✅ Remix complete!")
+                st.subheader("Remixed Volume Envelope")
+                plot_volume_envelope(remixed, title="Remixed Song", chorus_times=chorus_times)
 
-    plt.figure(figsize=(10, 3))
-    plt.plot(times, envelope, label="Volume Envelope")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude")
-    plt.title("Volume Envelope")
-    plt.tight_layout()
-    st.pyplot(plt.gcf())
-    plt.close()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out_file:
+                    output_path = out_file.name
+                    save_audio(remixed, output_path)
+                    st.audio(output_path, format="audio/mp3")
+                    with open(output_path, "rb") as f:
+                        st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
+
+    os.remove(song_path)
