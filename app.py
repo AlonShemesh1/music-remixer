@@ -1,48 +1,59 @@
 import streamlit as st
 import os
+import tempfile
 from utils.audio_processor import (
-    detect_chorus_sections,
-    apply_remix_with_chorus_loop,
+    get_volume_envelope,
+    get_chorus_intervals,
+    remix_song_with_chorus_loop,
     plot_volume_envelope
 )
-import time
 
-st.set_page_config(page_title="Music Remixer", layout="wide")
-st.title("🎵 Music Remixing App")
+st.set_page_config(page_title="Music Remixer", layout="centered")
+st.title("🎧 Music Remixer with Chorus Loop")
 
-style = st.selectbox("Choose a style:", ["Hip-Hop", "Reggae", "Rock"])
-uploaded_file = st.file_uploader("Upload your MP3 file", type=["mp3"])
+# Upload section
+uploaded_file = st.file_uploader("Upload a song (MP3 or WAV)", type=["mp3", "wav"])
+style = st.selectbox("Choose a remix style", ["Hip-Hop", "Reggae", "Rock"])
+
+# File paths for loops
+loop_paths = {
+    "Hip-Hop": {
+        "main": "loops/hiphop_main.mp3",
+        "chorus": "loops/hiphop_chorus.mp3"
+    },
+    "Reggae": {
+        "main": "loops/reggae_main.mp3",
+        "chorus": "loops/reggae_chorus.mp3"
+    },
+    "Rock": {
+        "main": "loops/rock_main.mp3",
+        "chorus": "loops/rock_chorus.mp3"
+    },
+}
 
 if uploaded_file:
-    song_path = f"temp_uploads/{uploaded_file.name}"
-    os.makedirs("temp_uploads", exist_ok=True)
-    with open(song_path, "wb") as f:
-        f.write(uploaded_file.read())
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        tmp.write(uploaded_file.read())
+        song_path = tmp.name
 
     st.audio(song_path, format="audio/mp3")
 
-    # Show original volume graph
-    st.subheader("🔊 Original Volume Envelope")
-    chorus_times = detect_chorus_sections(song_path)
-    plot_volume_envelope(song_path, chorus_times)
+    st.subheader("🔍 Original Volume Envelope")
+    original_envelope, sr = get_volume_envelope(song_path)
+    chorus_times = get_chorus_intervals(song_path)
+    plot_volume_envelope(original_envelope, sr, chorus_times, title="Original Song Envelope")
 
-    if st.button("🎛️ Remix"):
-        with st.spinner("Remixing in progress..."):
-            progress_bar = st.progress(0)
-            for pct in range(0, 100, 10):
-                time.sleep(0.1)
-                progress_bar.progress(pct + 10)
+    if st.button("🎶 Remix"):
+        with st.spinner("Remixing..."):
+            output_path = remix_song_with_chorus_loop(
+                song_path,
+                loop_paths[style]["main"],
+                loop_paths[style]["chorus"],
+                chorus_times
+            )
+            st.success("✅ Remix complete!")
 
-            main_loop = f"beats/{style.lower()}_main.mp3"
-            chorus_loop = f"beats/{style.lower()}_chorus.mp3"
-
-            try:
-                remixed_path = apply_remix_with_chorus_loop(song_path, main_loop, chorus_loop, chorus_times)
-                st.success("✅ Remix complete!")
-                st.audio(remixed_path, format="audio/mp3")
-
-                st.subheader("🎶 Remixed Volume Envelope")
-                plot_volume_envelope(remixed_path, chorus_times)
-
-            except Exception as e:
-                st.error(f"Error during remixing: {e}")
+        st.audio(output_path, format="audio/mp3")
+        st.subheader("🎚️ Remixed Volume Envelope")
+        remixed_envelope, _ = get_volume_envelope(output_path)
+        plot_volume_envelope(remixed_envelope, sr, chorus_times, title="Remixed Song Envelope")
