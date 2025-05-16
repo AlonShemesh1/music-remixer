@@ -1,73 +1,48 @@
 import streamlit as st
-import librosa
-import numpy as np
-import matplotlib.pyplot as plt
-import soundfile as sf
 import os
-from io import BytesIO
-from pydub import AudioSegment
 from utils.audio_processor import (
-    get_chorus_intervals,
-    apply_loops,
-    plot_volume_envelope,
+    detect_chorus_sections,
+    apply_remix_with_chorus_loop,
+    plot_volume_envelope
 )
+import time
 
 st.set_page_config(page_title="Music Remixer", layout="wide")
-st.title("🎵 Music Remixer App")
+st.title("🎵 Music Remixing App")
 
-st.sidebar.header("Choose Remix Style")
-style = st.sidebar.selectbox("Style", ("Hip-Hop", "Reggae", "Rock"))
-
-style_loops = {
-    "Hip-Hop": {
-        "main": "beats/hiphop_main.mp3",
-        "chorus": "beats/hiphop_chorus.mp3",
-    },
-    "Reggae": {
-        "main": "beats/reggae_main.mp3",
-        "chorus": "beats/reggae_chorus.mp3",
-    },
-    "Rock": {
-        "main": "beats/rock_main.mp3",
-        "chorus": "beats/rock_chorus.mp3",
-    },
-}
-
-uploaded_file = st.file_uploader("Upload a song (MP3)", type=["mp3"])
+style = st.selectbox("Choose a style:", ["Hip-Hop", "Reggae", "Rock"])
+uploaded_file = st.file_uploader("Upload your MP3 file", type=["mp3"])
 
 if uploaded_file:
-    st.audio(uploaded_file, format='audio/mp3')
+    song_path = f"temp_uploads/{uploaded_file.name}"
+    os.makedirs("temp_uploads", exist_ok=True)
+    with open(song_path, "wb") as f:
+        f.write(uploaded_file.read())
 
-    with st.spinner("Analyzing the song and detecting chorus..."):
-        song_path = f"temp/{uploaded_file.name}"
-        os.makedirs("temp", exist_ok=True)
-        with open(song_path, "wb") as f:
-            f.write(uploaded_file.read())
+    st.audio(song_path, format="audio/mp3")
 
-        y, sr = librosa.load(song_path)
-        chorus_times = get_chorus_intervals(song_path)
+    # Show original volume graph
+    st.subheader("🔊 Original Volume Envelope")
+    chorus_times = detect_chorus_sections(song_path)
+    plot_volume_envelope(song_path, chorus_times)
 
-        st.subheader("Original Volume Envelope")
-        fig_before = plot_volume_envelope(y, sr, chorus_times, title="Before Remix")
-        st.pyplot(fig_before)
+    if st.button("🎛️ Remix"):
+        with st.spinner("Remixing in progress..."):
+            progress_bar = st.progress(0)
+            for pct in range(0, 100, 10):
+                time.sleep(0.1)
+                progress_bar.progress(pct + 10)
 
-        if st.button("Remix"):  # Only remix on click
-            with st.spinner("Applying remix with loops..."):
-                loop_main = style_loops[style]["main"]
-                loop_chorus = style_loops[style]["chorus"]
+            main_loop = f"beats/{style.lower()}_main.mp3"
+            chorus_loop = f"beats/{style.lower()}_chorus.mp3"
 
-                remixed_audio = apply_loops(song_path, loop_main, loop_chorus, chorus_times)
+            try:
+                remixed_path = apply_remix_with_chorus_loop(song_path, main_loop, chorus_loop, chorus_times)
+                st.success("✅ Remix complete!")
+                st.audio(remixed_path, format="audio/mp3")
 
-                remixed_path = "output/remixed_song.wav"
-                os.makedirs("output", exist_ok=True)
-                sf.write(remixed_path, remixed_audio, sr)
+                st.subheader("🎶 Remixed Volume Envelope")
+                plot_volume_envelope(remixed_path, chorus_times)
 
-                y_remixed, _ = librosa.load(remixed_path)
-
-                st.success("Remix complete!")
-
-                st.subheader("Remixed Volume Envelope")
-                fig_after = plot_volume_envelope(y_remixed, sr, chorus_times, title="After Remix")
-                st.pyplot(fig_after)
-
-                st.audio(remixed_path, format="audio/wav")
+            except Exception as e:
+                st.error(f"Error during remixing: {e}")
