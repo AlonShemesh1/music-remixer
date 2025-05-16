@@ -14,11 +14,27 @@ def get_volume_envelope(path, sr=22050):
 def get_chorus_intervals(path, sr=22050):
     y, _ = librosa.load(path, sr=sr)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
-    segments = librosa.segment.agglomerative(y, k=4)
+    if len(beats) < 2:
+        return []  # אם אין מספיק ביטים
+
+    # חיתוך לאזור הביטים
+    y_sync = librosa.util.sync(y, beats, aggregate=np.median)
+    segments = librosa.segment.agglomerative(y_sync, k=4)
+
+    # ודא שאורך הסגמנטים תואם לביטים
+    segments = segments[:len(beats)]
+
+    # מצא את הקלאסטר שמופיע הכי הרבה
     chorus_cluster = np.argmax(np.bincount(segments))
-    beat_times = librosa.frames_to_time(beats)
-    chorus_times = [(beat_times[i], beat_times[i+1]) for i in range(len(beats)-1) if segments[i] == chorus_cluster]
+    beat_times = librosa.frames_to_time(beats, sr=sr)
+
+    chorus_times = [
+        (beat_times[i], beat_times[i+1])
+        for i in range(len(beat_times)-1)
+        if i < len(segments) and segments[i] == chorus_cluster
+    ]
     return chorus_times
+
 
 def plot_envelope_with_chorus(envelope, sr, chorus_times, title="Envelope"):
     fig, ax = plt.subplots(figsize=(12, 3))
