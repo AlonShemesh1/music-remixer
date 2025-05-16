@@ -15,6 +15,7 @@ uploaded_file = st.file_uploader("Upload a song (MP3)", type=["mp3"])
 style = st.selectbox("Choose a remix style", ["Hip-Hop", "Reggae", "Rock"])
 
 if uploaded_file:
+    os.makedirs("uploads", exist_ok=True)
     with open(f"uploads/{uploaded_file.name}", "wb") as f:
         f.write(uploaded_file.getbuffer())
 
@@ -30,7 +31,6 @@ if uploaded_file:
 
     if st.button("🎛 Remix"):
         with st.spinner("Processing remix..."):
-            # Updated: specify beats folder for loops
             audio_output_path, envelope_after = process_audio(song_path, style, chorus_times, loops_dir="beats")
 
         st.success("Remix complete!")
