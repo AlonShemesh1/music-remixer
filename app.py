@@ -16,13 +16,13 @@ style = st.selectbox("Choose a remix style", ["Hip-Hop", "Reggae", "Rock"])
 
 if uploaded_file:
     os.makedirs("uploads", exist_ok=True)
-    song_path = f"uploads/{uploaded_file.name}"
-    with open(song_path, "wb") as f:
+    with open(f"uploads/{uploaded_file.name}", "wb") as f:
         f.write(uploaded_file.getbuffer())
 
+    song_path = f"uploads/{uploaded_file.name}"
     st.audio(song_path)
-    sr = 22050
 
+    sr = 22050
     envelope = get_volume_envelope(song_path, sr)
     chorus_times = get_chorus_intervals(song_path)
 
