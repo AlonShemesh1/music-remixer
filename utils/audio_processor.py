@@ -49,16 +49,15 @@ def plot_envelope_with_chorus(envelope, sr, chorus_times, title="Envelope"):
     fig.patch.set_facecolor('#0E1117')
     ax.set_facecolor('#0E1117')
     st.pyplot(fig)
-
-def process_audio(song_path, style, chorus_times, sr=22050):
-    y, _ = librosa.load(song_path, sr=sr)
-
-    loop_dir = "loops"
-    loop_main_path = os.path.join(loop_dir, f"{style.lower()}_main.mp3")
-    loop_chorus_path = os.path.join(loop_dir, f"{style.lower()}_chorus.mp3")
+def process_audio(song_path, style, chorus_times, sr=22050, loops_dir="beats"):
+    loop_main_path = os.path.join(loops_dir, f"{style}_main.mp3")
+    loop_chorus_path = os.path.join(loops_dir, f"{style}_chorus.mp3")
 
     loop_main, _ = librosa.load(loop_main_path, sr=sr)
     loop_chorus, _ = librosa.load(loop_chorus_path, sr=sr)
+
+    # המשך הקוד שלך...
+
 
     output = np.zeros_like(y)
     segment_length = len(loop_main)
