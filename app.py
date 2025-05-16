@@ -2,20 +2,17 @@ import streamlit as st
 import os
 import tempfile
 import librosa
-import numpy as np
-
 from utils.audio_processor import (
     load_audio,
     save_audio,
     mix_with_chorus_loop,
     get_bpm,
     get_chorus_intervals,
-    plot_volume_envelope,
-    insert_loops
+    plot_volume_envelope
 )
 
 st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
-st.title("🎵 Music Remixer with Chorus Detection")
+st.title("🎵 Music Remixer")
 
 uploaded_file = st.file_uploader("Upload a song (MP3 or WAV)", type=["mp3", "wav"])
 style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
@@ -46,32 +43,36 @@ if uploaded_file is not None:
         }
     }
 
-    main_path = loop_paths[style]["main"]
-    chorus_path = loop_paths[style]["chorus"]
-
-    if not os.path.exists(main_path) or not os.path.exists(chorus_path):
-        st.error(f"Missing loop files for {style}")
+    if not os.path.exists(loop_paths[style]["main"]) or not os.path.exists(loop_paths[style]["chorus"]):
+        st.error(f"Missing loop files for {style}. Please make sure they exist in the 'beats' folder.")
     else:
-        with st.spinner("Detecting chorus and remixing..."):
+        with st.spinner("Analyzing song..."):
             bpm = get_bpm(song_path)
             st.write(f"Detected BPM: {bpm}")
             chorus_times = get_chorus_intervals(song_path)
 
-            main_loop = load_audio(main_path)
-            chorus_loop = load_audio(chorus_path)
+        if st.button("Remix"):
+            with st.spinner("Applying remix..."):
+                remixed = mix_with_chorus_loop(
+                    song,
+                    loop_paths[style]["main"],
+                    loop_paths[style]["chorus"],
+                    chorus_times,
+                    bpm,
+                    loop_volume
+                )
 
-            remixed = mix_with_chorus_loop(song, main_loop, chorus_loop, chorus_times, bpm, loop_volume)
+                st.success("✅ Remix complete!")
+                st.subheader("Remixed Volume Envelope")
+                plot_volume_envelope(remixed)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out_file:
-                output_path = out_file.name
-                save_audio(remixed, output_path)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out_file:
+                    output_path = out_file.name
+                    save_audio(remixed, output_path)
 
-            st.success("✅ Remix complete!")
-            st.subheader("Remixed Volume Envelope")
-            plot_volume_envelope(remixed)
-            st.audio(output_path, format="audio/mp3")
+                st.audio(output_path, format="audio/mp3")
 
-            with open(output_path, "rb") as f:
-                st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
+                with open(output_path, "rb") as f:
+                    st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
 
     os.remove(song_path)
