@@ -28,20 +28,18 @@ def mix_with_chorus_loop(song_path, main_loop_path, chorus_loop_path, chorus_tim
     loop_main, _ = librosa.load(main_loop_path, sr=sr)
     loop_chorus, _ = librosa.load(chorus_loop_path, sr=sr)
 
-    loop_main = librosa.util.fix_length(loop_main, len(y))
     output = np.copy(y)
-
     gain = 10 ** (volume_db / 20.0)
 
+    # הוספת הלופ לפזמון
     for start, end in chorus_times:
         start_sample = int(start * sr)
         end_sample = int(end * sr)
-        loop = loop_chorus
-        loop = np.tile(loop, int(np.ceil((end_sample - start_sample) / len(loop))))
+        loop = np.tile(loop_chorus, int(np.ceil((end_sample - start_sample) / len(loop_chorus))))
         loop = loop[:end_sample - start_sample]
         output[start_sample:end_sample] += gain * loop
 
-    # Add main loop to non-chorus parts
+    # הוספת הלופ הכללי לשאר השיר
     full_loop = np.tile(loop_main, int(np.ceil(len(y) / len(loop_main))))
     full_loop = full_loop[:len(y)]
     output += gain * full_loop
