@@ -1,59 +1,64 @@
 import streamlit as st
-import os
-import tempfile
-from utils.audio_processor import (
-    get_volume_envelope,
-    get_chorus_intervals,
-    remix_song_with_chorus_loop,
-    plot_volume_envelope
-)
+import time
+import matplotlib.pyplot as plt
+import numpy as np
+from utils.audio_processor import process_audio, get_volume_envelope, get_chorus_intervals, plot_envelope_with_chorus
 
-st.set_page_config(page_title="Music Remixer", layout="centered")
-st.title("🎧 Music Remixer with Chorus Loop")
+# Initialize session state
+if "processing_times" not in st.session_state:
+    st.session_state.processing_times = {}
 
-# Upload section
-uploaded_file = st.file_uploader("Upload a song (MP3 or WAV)", type=["mp3", "wav"])
-style = st.selectbox("Choose a remix style", ["Hip-Hop", "Reggae", "Rock"])
+st.title("🎧 Music Remixer with Timeline")
 
-# File paths for loops
-loop_paths = {
-    "Hip-Hop": {
-        "main": "loops/hiphop_main.mp3",
-        "chorus": "loops/hiphop_chorus.mp3"
-    },
-    "Reggae": {
-        "main": "loops/reggae_main.mp3",
-        "chorus": "loops/reggae_chorus.mp3"
-    },
-    "Rock": {
-        "main": "loops/rock_main.mp3",
-        "chorus": "loops/rock_chorus.mp3"
-    },
-}
+uploaded_file = st.file_uploader("Upload a song (MP3)", type=["mp3"])
+
+style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        tmp.write(uploaded_file.read())
-        song_path = tmp.name
+    st.audio(uploaded_file, format="audio/mp3")
+    
+    # Measure timing
+    t0 = time.time()
+    song_path = f"/tmp/{uploaded_file.name}"
+    with open(song_path, "wb") as f:
+        f.write(uploaded_file.read())
+    t_load = time.time()
 
-    st.audio(song_path, format="audio/mp3")
-
-    st.subheader("🔍 Original Volume Envelope")
-    original_envelope, sr = get_volume_envelope(song_path)
+    st.markdown("### 🔊 Volume Envelope Before Remix")
+    envelope_before = get_volume_envelope(song_path)
     chorus_times = get_chorus_intervals(song_path)
-    plot_volume_envelope(original_envelope, sr, chorus_times, title="Original Song Envelope")
+    fig_before = plot_envelope_with_chorus(envelope_before, chorus_times)
+    st.pyplot(fig_before)
+    t_plot = time.time()
 
-    if st.button("🎶 Remix"):
+    if st.button("🎛️ Remix"):
         with st.spinner("Remixing..."):
-            output_path = remix_song_with_chorus_loop(
-                song_path,
-                loop_paths[style]["main"],
-                loop_paths[style]["chorus"],
-                chorus_times
-            )
-            st.success("✅ Remix complete!")
+            audio_output_path, envelope_after = process_audio(song_path, style, chorus_times)
+            t_process = time.time()
 
-        st.audio(output_path, format="audio/mp3")
-        st.subheader("🎚️ Remixed Volume Envelope")
-        remixed_envelope, _ = get_volume_envelope(output_path)
-        plot_volume_envelope(remixed_envelope, sr, chorus_times, title="Remixed Song Envelope")
+            st.success("Remix Complete!")
+
+            st.markdown("### 🔊 Volume Envelope After Remix")
+            fig_after = plot_envelope_with_chorus(envelope_after, chorus_times)
+            st.pyplot(fig_after)
+
+            st.markdown("### 📈 Processing Time Breakdown")
+            times = {
+                "Load file": t_load - t0,
+                "Plot before": t_plot - t_load,
+                "Remix process": t_process - t_plot,
+                "Total": t_process - t0
+            }
+
+            st.session_state.processing_times = times
+
+            st.write(times)
+
+            # Plot as horizontal bar chart
+            fig, ax = plt.subplots()
+            labels = list(times.keys())
+            values = list(times.values())
+            ax.barh(labels, values, color="skyblue")
+            ax.set_xlabel("Seconds")
+            ax.set_title("Remix Processing Timeline")
+            st.pyplot(fig)
