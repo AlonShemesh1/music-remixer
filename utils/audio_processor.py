@@ -16,18 +16,29 @@ def get_volume_envelope(audio_path, sr=22050):
 def get_chorus_intervals(audio_path, sr=22050):
     y, _ = librosa.load(audio_path, sr=sr)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
-    beat_times = librosa.frames_to_time(beats, sr=sr)
+    if len(beats) < 2:
+        return []  # לא מספיק ביטים כדי לזהות פזמון
 
+    beat_times = librosa.frames_to_time(beats, sr=sr)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+
+    # ודא שיש מספיק פריימים לאשכול
+    if chroma.shape[1] < 2:
+        return []
+
     from sklearn.cluster import KMeans
     kmeans = KMeans(n_clusters=2, random_state=0).fit(chroma.T)
     labels = kmeans.labels_
 
     chorus_cluster = np.argmax(np.bincount(labels))
-    chorus_times = [(beat_times[i], beat_times[i + 1])
-                    for i in range(len(labels) - 1) if labels[i] == chorus_cluster]
+    chorus_times = []
+
+    for i in range(len(labels) - 1):
+        if i + 1 < len(beat_times) and labels[i] == chorus_cluster:
+            chorus_times.append((beat_times[i], beat_times[i + 1]))
 
     return chorus_times
+
 
 def plot_envelope_with_chorus(envelope, sr, chorus_times, title="Volume Envelope"):
     plt.figure(figsize=(10, 3))
