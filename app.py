@@ -10,7 +10,7 @@ from utils.audio_processor import (
 )
 
 st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
-st.title("🎵 Music Remixer with Chorus Detection")
+st.title("🎵 Music Remixer")
 
 uploaded_file = st.file_uploader("Upload a song (MP3 or WAV)", type=["mp3", "wav"])
 style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
