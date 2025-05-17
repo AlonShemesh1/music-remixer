@@ -1,58 +1,44 @@
-import streamlit as st
-import tempfile
-import os
-from utils.audio_processor import (
-    load_audio,
-    save_audio,
-    get_chorus_intervals,
-    insert_loops,
-    plot_envelope_with_chorus
-)
+import librosa
+import librosa.display
+import numpy as np
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
-st.title("🎵 Music Remixer with Chorus Detection")
+def get_chorus_intervals_advanced(file_path, sr=22050):
+    y, _ = librosa.load(file_path, sr=sr)
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+    similarity = np.dot(chroma.T, chroma)
+    sim_norm = similarity / np.max(similarity)
 
-uploaded_file = st.file_uploader("Upload a song (MP3 or WAV)", type=["mp3", "wav"])
-style = st.selectbox("Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
-loop_volume = st.slider("Loop Volume (dB)", -20, 10, 0)
+    # Path enhancement using median filter
+    path_sim = librosa.decompose.nn_filter(sim_norm, aggregate=np.median, metric='cosine')
 
-if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        tmp.write(uploaded_file.read())
-        song_path = tmp.name
+    # Repeat score and peaks
+    rep_scores = np.mean(path_sim, axis=0)
+    peaks = librosa.util.peak_pick(rep_scores, 16, 16, 16, 16, 0.9, 5)
 
-    y, sr = load_audio(song_path)
-    st.audio(song_path)
+    times = librosa.frames_to_time(peaks, sr=sr)
+    chorus_times = [(t, t + 10.0) for t in times if t + 10.0 < librosa.get_duration(y=y, sr=sr)]
+    return chorus_times
 
-    st.subheader("Original Volume Envelope")
-    chorus_times = get_chorus_intervals(song_path)
-    plot_envelope_with_chorus(y, sr, chorus_times, title="Original Envelope")
+def plot_musical_features(file_path, sr=22050):
+    y, _ = librosa.load(file_path, sr=sr)
 
-    loops = {
-        "Hip-Hop": ("beats/hiphop_main.mp3", "beats/hiphop_chorus.mp3"),
-        "Reggae": ("beats/reggae_main.mp3", "beats/reggae_chorus.mp3"),
-        "Rock": ("beats/rock_main.mp3", "beats/rock_chorus.mp3")
-    }
+    fig, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
-    main_loop_path, chorus_loop_path = loops[style]
+    # Chroma
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    librosa.display.specshow(chroma, y_axis='chroma', x_axis='time', ax=ax[0])
+    ax[0].set(title='Chroma Features')
 
-    if not os.path.exists(main_loop_path) or not os.path.exists(chorus_loop_path):
-        st.error(f"Loop files not found for style: {style}")
-    else:
-        if st.button("🎧 Remix"):
-            with st.spinner("Remixing with loops..."):
-                y_remixed, envelope_remixed = insert_loops(
-                    y, sr, main_loop_path, chorus_loop_path, chorus_times, loop_volume
-                )
+    # Tempogram
+    tempogram = librosa.feature.tempogram(y=y, sr=sr)
+    librosa.display.specshow(tempogram, y_axis='tempo', x_axis='time', ax=ax[1])
+    ax[1].set(title='Tempogram')
 
-                st.subheader("Remixed Volume Envelope")
-                plot_envelope_with_chorus(y_remixed, sr, chorus_times, title="Remixed Envelope")
+    # MFCC
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    librosa.display.specshow(mfcc, x_axis='time', ax=ax[2])
+    ax[2].set(title='MFCC')
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out_file:
-                    remixed_path = out_file.name
-                    save_audio(y_remixed, sr, remixed_path)
-
-                st.success("✅ Remix complete!")
-                st.audio(remixed_path)
-                with open(remixed_path, "rb") as f:
-                    st.download_button("⬇️ Download Remixed Song", f, file_name="remixed_song.mp3")
+    fig.tight_layout()
+    return fig
