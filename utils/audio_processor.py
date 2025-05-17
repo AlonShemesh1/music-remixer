@@ -10,17 +10,19 @@ def load_audio(path, sr=22050):
 
 def save_audio(y, sr, path):
     sf.write(path, y, sr)
-
+    
 def get_chorus_intervals(path, sr=22050):
     y, _ = librosa.load(path, sr=sr)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     similarity = librosa.segment.recurrence_matrix(chroma, mode='affinity')
-    path_sim = librosa.segment.path_enhance(similarity, window=7)
+    # Compatible without window
+    path_sim = librosa.segment.path_enhance(similarity)
     repeat_scores = path_sim.sum(axis=1)
     peaks = librosa.util.peak_pick(repeat_scores, 16, 16, 16, 16, 0.9, 5)
     beat_times = librosa.frames_to_time(peaks, sr=sr)
-    intervals = [(t, t + 5.0) for t in beat_times]  # each chorus segment lasts 5 seconds
+    intervals = [(t, t + 5.0) for t in beat_times]
     return intervals
+
 
 def plot_envelope_with_chorus(y, sr, chorus_times, title="Volume Envelope"):
     hop_length = 512
