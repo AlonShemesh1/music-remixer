@@ -29,7 +29,7 @@ def get_chorus_intervals(path, sr=22050, k=4):
         end = times[i + 1]
         intervals.append((start, end))
 
-    # Return all intervals (you could apply logic to pick the chorus later)
+    # Return all intervals (you could ly logic to pick the chorus later)
     return intervals
 
 
