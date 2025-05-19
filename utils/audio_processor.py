@@ -1,63 +1,64 @@
-import os
-import random
 import librosa
 import numpy as np
 import soundfile as sf
+import random
+import os
 
-def detect_chorus_intervals(y, sr):
-    # ניתוח מבני למציאת הפזמון
-    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+def get_chorus_intervals(audio_path):
+    y, sr = librosa.load(audio_path, mono=True)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    boundaries = librosa.segment.agglomerative(chroma, k=4)
-    boundaries = np.pad(boundaries, (0, 1), mode='constant', constant_values=len(chroma.T))
-    segments = [(librosa.frames_to_time(boundaries[i], sr=sr),
-                 librosa.frames_to_time(boundaries[i+1], sr=sr))
-                for i in range(len(boundaries)-1)]
+    similarity = librosa.segment.recurrence_matrix(chroma, mode='affinity')
+    similarity_enhanced = similarity.copy()
+    boundaries = librosa.segment.agglomerative(similarity_enhanced, k=4)
+    intervals = librosa.frames_to_time(boundaries, sr=sr)
+    return [(intervals[i], intervals[i+1]) for i in range(len(intervals)-1)]
 
-    chorus = max(segments, key=lambda x: x[1] - x[0])  # הקטע הארוך ביותר
-    return [chorus]  # רשימה של פזמונים
+def compute_volume_envelope(audio_path):
+    y, sr = librosa.load(audio_path, mono=True)
+    hop_length = 512
+    envelope = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=hop_length)
+    return times, envelope
 
-def remix_audio(song_path, style, chorus_times):
-    os.makedirs("output", exist_ok=True)
-
-    y, sr = librosa.load(song_path, sr=None)
+def remix_audio(song_path, style, chorus_segments):
+    y, sr = librosa.load(song_path, mono=True)
     duration = librosa.get_duration(y=y, sr=sr)
 
-    beat_folder = "beats"
-    all_files = [f for f in os.listdir(beat_folder) if f.endswith(".wav") or f.endswith(".mp3")]
+    # Select random loops
+    base_loop_path = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
+    chorus_loop_path = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
 
-    style_lower = style.replace("-", "").replace(" ", "").lower()
-    beat_files = [f for f in all_files if style_lower in f.replace("-", "").replace(" ", "").lower()]
+    base_loop, _ = librosa.load(base_loop_path, sr=sr)
+    chorus_loop, _ = librosa.load(chorus_loop_path, sr=sr)
 
-    if len(beat_files) < 4:
-        raise ValueError(f"You must have at least 4 loops for style '{style}' in the beats folder.")
+    # Prepare loop overlays
+    loop_overlay = np.zeros_like(y)
+    for i in range(0, len(y), len(base_loop)):
+        segment = base_loop[:min(len(base_loop), len(y) - i)]
+        loop_overlay[i:i+len(segment)] += segment
 
-    selected = random.sample(beat_files, 2)
-    verse_loop, chorus_loop = [
-        librosa.load(os.path.join(beat_folder, f), sr=sr)[0]
-        for f in selected
-    ]
+    # Add chorus loop on top during chorus segments
+    for start, end in chorus_segments:
+        s = int(start * sr)
+        e = int(end * sr)
+        seg_len = e - s
+        chorus_audio = np.tile(chorus_loop, int(np.ceil(seg_len / len(chorus_loop))))[:seg_len]
+        loop_overlay[s:e] += chorus_audio
 
-    beat_track = np.zeros_like(y)
+    # Combine original audio with loops
+    combined = y + loop_overlay
 
-    for t in range(0, len(y), len(verse_loop)):
-        beat_track[t:t+len(verse_loop)] += verse_loop[:min(len(verse_loop), len(y)-t)]
+    # Normalize to prevent clipping
+    max_amp = np.max(np.abs(combined))
+    if max_amp > 1.0:
+        combined = combined / max_amp
 
-    for start, end in chorus_times:
-        start_i = int(start * sr)
-        end_i = int(end * sr)
-        for t in range(start_i, end_i, len(chorus_loop)):
-            beat_track[t:t+len(chorus_loop)] = chorus_loop[:min(len(chorus_loop), end_i - t)]
-
-    combined = y + 0.5 * beat_track
     out_path = "output/remixed.wav"
-    sf.write(out_path, combined.astype(np.float32), sr)
-
+    sf.write(out_path, combined, sr)
     return out_path
 
-def get_volume_envelope(path):
-    y, sr = librosa.load(path)
+def compute_volume_envelope_from_array(audio_array, sr):
     hop_length = 512
-    envelope = np.abs(librosa.stft(y, hop_length=hop_length)).mean(axis=0)
+    envelope = librosa.feature.rms(y=audio_array, hop_length=hop_length)[0]
     times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=hop_length)
     return times, envelope
