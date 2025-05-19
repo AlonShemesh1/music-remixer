@@ -1,62 +1,57 @@
 import streamlit as st
 import os
-import tempfile
-import random
 from utils.audio_processor import (
-    load_audio, save_audio, get_chorus_intervals,
-    mix_with_chorus_loop, get_bpm, plot_volume_envelope
+    compute_volume_envelope,
+    get_chorus_intervals,
+    remix_audio
 )
+import matplotlib.pyplot as plt
+import numpy as np
 
-st.set_page_config(page_title="🎵 Music Remixer", layout="centered")
-st.title("🎵 Music Remixer – Random Loops Edition")
+st.set_page_config(page_title="Music Remixer", layout="centered")
 
-uploaded_file = st.file_uploader("🎵 Upload your song (MP3 or WAV)", type=["mp3", "wav"])
-style = st.selectbox("🎚 Choose remix style", ["Hip-Hop", "Reggae", "Rock"])
-loop_volume = st.slider("🔊 Loop Volume (dB)", -20, 10, 0)
+st.title("🎛️ Music Remixer")
+st.markdown("Upload a song and remix it with a different style loop for the chorus!")
+
+uploaded_file = st.file_uploader("Upload a song (mp3 or wav)", type=["mp3", "wav"])
+
+style = st.selectbox("Choose a style for remixing:", ["hiphop", "reggae", "rock"])
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        tmp.write(uploaded_file.read())
-        song_path = tmp.name
+    song_path = f"uploaded/{uploaded_file.name}"
+    os.makedirs("uploaded", exist_ok=True)
+    with open(song_path, "wb") as f:
+        f.write(uploaded_file.read())
 
-    st.audio(song_path)
-    st.subheader("📈 Original Song Volume Envelope")
+    # Show original envelope
+    st.subheader("Original Volume Envelope")
+    times, envelope = compute_volume_envelope(song_path)
+    chorus_times = get_chorus_intervals(song_path)
 
-    song = load_audio(song_path)
-    plot_volume_envelope(song)
+    fig, ax = plt.subplots()
+    ax.plot(times, envelope, label="Envelope")
+    for start, end in chorus_times:
+        ax.axvspan(start, end, color='red', alpha=0.3, label='Chorus')
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Volume")
+    ax.set_title("Original Envelope with Chorus Highlighted")
+    st.pyplot(fig)
 
-    with st.spinner("🔍 Analyzing song..."):
-        bpm = get_bpm(song_path)
-        st.write(f"🕒 Detected BPM: {bpm}")
+    if st.button("🔁 Remix"):
+        with st.spinner("Remixing..."):
+            output_path = remix_audio(song_path, style, chorus_times)
 
-        # בחר שני לופים רנדומליים מתוך 4 עבור הסגנון שנבחר
-        main_index = random.randint(1, 4)
-        chorus_index = random.randint(1, 4)
+            # Show remixed envelope
+            st.subheader("Remixed Volume Envelope")
+            times2, envelope2 = compute_volume_envelope(output_path)
+            fig2, ax2 = plt.subplots()
+            ax2.plot(times2, envelope2, label="Remixed")
+            for start, end in chorus_times:
+                ax2.axvspan(start, end, color='green', alpha=0.3, label='Chorus')
+            ax2.set_xlabel("Time (s)")
+            ax2.set_ylabel("Volume")
+            ax2.set_title("Remixed Envelope with Chorus Highlighted")
+            st.pyplot(fig2)
 
-        main_loop_path = f"beats/{style.lower().replace('-', '')}_loop_{main_index}.mp3"
-        chorus_loop_path = f"beats/{style.lower().replace('-', '')}_loop_{chorus_index}.mp3"
-
-        if not os.path.exists(main_loop_path) or not os.path.exists(chorus_loop_path):
-            st.error(f"❌ Missing loop files for {style}. Please check beats folder.")
-        else:
-            main_loop = load_audio(main_loop_path) + loop_volume
-            chorus_loop = load_audio(chorus_loop_path) + loop_volume
-
-            if st.button("🎛 Remix"):
-                with st.spinner("🎶 Remixing in progress..."):
-                    chorus_times = get_chorus_intervals(song_path)
-                    remixed = mix_with_chorus_loop(song, main_loop, chorus_loop, chorus_times, bpm, loop_volume)
-
-                    st.subheader("📉 Remixed Volume Envelope")
-                    plot_volume_envelope(remixed)
-
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out_file:
-                        output_path = out_file.name
-                        save_audio(remixed, output_path)
-
-                    st.success("✅ Remix complete!")
-                    st.audio(output_path, format="audio/mp3")
-                    with open(output_path, "rb") as f:
-                        st.download_button("⬇️ Download Remixed Song", f, file_name="remixed_song.mp3")
-
-    os.remove(song_path)
+            st.audio(output_path, format='audio/wav')
+            st.success("Remix complete!")
