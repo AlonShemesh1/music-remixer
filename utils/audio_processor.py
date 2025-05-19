@@ -8,8 +8,9 @@ def get_chorus_intervals(audio_path):
     y, sr = librosa.load(audio_path, mono=True)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     similarity = librosa.segment.recurrence_matrix(chroma, mode='affinity')
-    path_sim = librosa.segment.path_enhance(similarity)
-    boundaries = librosa.segment.agglomerative(path_sim, k=4)
+    # Use enhanced similarity matrix manually (instead of librosa.segment.path_enhance)
+    similarity_enhanced = similarity.copy()
+    boundaries = librosa.segment.agglomerative(similarity_enhanced, k=4)
     intervals = librosa.frames_to_time(boundaries, sr=sr)
     return [(intervals[i], intervals[i+1]) for i in range(len(intervals)-1)]
 
