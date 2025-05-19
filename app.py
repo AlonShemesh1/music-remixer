@@ -1,46 +1,57 @@
 import streamlit as st
 import os
-import librosa
-import librosa.display
+from utils.audio_processor import (
+    compute_volume_envelope,
+    get_chorus_intervals,
+    remix_audio
+)
 import matplotlib.pyplot as plt
-from utils.audio_processor import remix_audio, detect_chorus_intervals, get_volume_envelope
 import numpy as np
 
 st.set_page_config(page_title="Music Remixer", layout="centered")
-st.title("🎵 AI Music Remixer")
 
-uploaded_file = st.file_uploader("Upload a song", type=["mp3", "wav"])
-style = st.selectbox("Choose Remix Style", ["Hip-Hop", "Reggae", "Rock"])
+st.title("🎛️ Music Remixer")
+st.markdown("Upload a song and remix it with a different style loop for the chorus!")
 
-if st.button("Remix") and uploaded_file:
-    with st.spinner("Processing..."):
-        os.makedirs("uploads", exist_ok=True)
-        song_path = os.path.join("uploads", uploaded_file.name)
-        with open(song_path, "wb") as f:
-            f.write(uploaded_file.read())
+uploaded_file = st.file_uploader("Upload a song (mp3 or wav)", type=["mp3", "wav"])
 
-        y, sr = librosa.load(song_path)
-        chorus_times = detect_chorus_intervals(y, sr)
+style = st.selectbox("Choose a style for remixing:", ["hiphop", "reggae", "rock"])
 
-        st.subheader("Original Volume Envelope")
-        times, envelope = get_volume_envelope(song_path)
-        fig, ax = plt.subplots()
-        ax.plot(times, envelope)
-        for start, end in chorus_times:
-            ax.axvspan(start, end, color='orange', alpha=0.3)
-        ax.set_title("Original Song")
-        st.pyplot(fig)
+if uploaded_file:
+    song_path = f"uploaded/{uploaded_file.name}"
+    os.makedirs("uploaded", exist_ok=True)
+    with open(song_path, "wb") as f:
+        f.write(uploaded_file.read())
 
-        output_path = remix_audio(song_path, style, chorus_times)
+    # Show original envelope
+    st.subheader("Original Volume Envelope")
+    times, envelope = compute_volume_envelope(song_path)
+    chorus_times = get_chorus_intervals(song_path)
 
-        st.subheader("Remixed Volume Envelope")
-        times2, envelope2 = get_volume_envelope(output_path)
-        fig2, ax2 = plt.subplots()
-        ax2.plot(times2, envelope2)
-        for start, end in chorus_times:
-            ax2.axvspan(start, end, color='green', alpha=0.3)
-        ax2.set_title("Remixed Song")
-        st.pyplot(fig2)
+    fig, ax = plt.subplots()
+    ax.plot(times, envelope, label="Envelope")
+    for start, end in chorus_times:
+        ax.axvspan(start, end, color='red', alpha=0.3, label='Chorus')
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Volume")
+    ax.set_title("Original Envelope with Chorus Highlighted")
+    st.pyplot(fig)
 
-        st.success("Remix complete!")
-        st.audio(output_path)
+    if st.button("🔁 Remix"):
+        with st.spinner("Remixing..."):
+            output_path = remix_audio(song_path, style, chorus_times)
+
+            # Show remixed envelope
+            st.subheader("Remixed Volume Envelope")
+            times2, envelope2 = compute_volume_envelope(output_path)
+            fig2, ax2 = plt.subplots()
+            ax2.plot(times2, envelope2, label="Remixed")
+            for start, end in chorus_times:
+                ax2.axvspan(start, end, color='green', alpha=0.3, label='Chorus')
+            ax2.set_xlabel("Time (s)")
+            ax2.set_ylabel("Volume")
+            ax2.set_title("Remixed Envelope with Chorus Highlighted")
+            st.pyplot(fig2)
+
+            st.audio(output_path, format='audio/wav')
+            st.success("Remix complete!")
