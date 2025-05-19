@@ -6,22 +6,22 @@ import random
 import soundfile as sf
 
 def detect_chorus_intervals(y, sr):
+    # מחשבים תכונות כרומטיות
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
-    laplacian = librosa.segment.linalg.laplacian(recurrence, norm=True)
-    _, vectors = np.linalg.eigh(laplacian)
-    k = 4
-    X = vectors[:, 1:k+1]
-    labels = sklearn.cluster.KMeans(n_clusters=k, n_init=10, random_state=0).fit_predict(X)
+    # מחלקים את השיר ל-4 קטעים ע"י Agglomerative Clustering
+    boundaries = librosa.segment.agglomerative(chroma.T, k=4)
+    boundaries = np.pad(boundaries, (0,1), mode='constant', constant_values=chroma.shape[1])
 
-    boundaries = np.flatnonzero(np.diff(labels)) + 1
-    boundaries = np.pad(boundaries, (0, 1), mode='constant', constant_values=chroma.shape[1])
-    segments = [(librosa.frames_to_time(boundaries[i], sr=sr),
-                 librosa.frames_to_time(boundaries[i+1], sr=sr))
-                for i in range(len(boundaries)-1)]
+    segments = []
+    for i in range(len(boundaries)-1):
+        start = librosa.frames_to_time(boundaries[i], sr=sr)
+        end = librosa.frames_to_time(boundaries[i+1], sr=sr)
+        segments.append((start, end))
 
-    chorus = max(segments, key=lambda x: x[1] - x[0])
+    # מחזירים את הקטע הארוך ביותר כ"פזמון"
+    chorus = max(segments, key=lambda x: x[1]-x[0])
     return [chorus]
+
 
 def remix_audio(song_path, style, chorus_times):
     y, sr = librosa.load(song_path, sr=None)
