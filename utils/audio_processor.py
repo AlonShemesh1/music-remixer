@@ -1,55 +1,55 @@
 import librosa
 import numpy as np
-import soundfile as sf
+import sklearn.cluster
 import os
 import random
-from pydub import AudioSegment
+import soundfile as sf
 
 def detect_chorus_intervals(y, sr):
-    # ניתוח מבני למציאת הפזמון
-    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    boundaries = librosa.segment.agglomerative(chroma, k=4)
-    boundaries = np.pad(boundaries, (0, 1), mode='constant', constant_values=len(chroma.T))
+    recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
+    laplacian = librosa.segment.linalg.laplacian(recurrence, norm=True)
+    _, vectors = np.linalg.eigh(laplacian)
+    k = 4
+    X = vectors[:, 1:k+1]
+    labels = sklearn.cluster.KMeans(n_clusters=k, n_init=10, random_state=0).fit_predict(X)
+
+    boundaries = np.flatnonzero(np.diff(labels)) + 1
+    boundaries = np.pad(boundaries, (0, 1), mode='constant', constant_values=chroma.shape[1])
     segments = [(librosa.frames_to_time(boundaries[i], sr=sr),
                  librosa.frames_to_time(boundaries[i+1], sr=sr))
                 for i in range(len(boundaries)-1)]
 
-    chorus = max(segments, key=lambda x: x[1] - x[0])  # הקטע הארוך ביותר
-    return [chorus]  # רשימה של פזמונים
+    chorus = max(segments, key=lambda x: x[1] - x[0])
+    return [chorus]
 
 def remix_audio(song_path, style, chorus_times):
-    os.makedirs("output", exist_ok=True)
-
     y, sr = librosa.load(song_path, sr=None)
-    duration = librosa.get_duration(y=y, sr=sr)
 
-    # טען 4 לופים באותו סגנון
     beat_folder = f"beats/{style}"
     beat_files = [f for f in os.listdir(beat_folder) if f.endswith(".wav")]
     if len(beat_files) < 4:
         raise ValueError("You must have at least 4 loops per style")
 
-    # בחר לופים רנדומליים ל־verse ול־chorus
     selected = random.sample(beat_files, 2)
     verse_loop, chorus_loop = [librosa.load(os.path.join(beat_folder, f), sr=sr)[0] for f in selected]
 
-    # בנה טראק לופים לאורך השיר
     beat_track = np.zeros_like(y)
+
     for t in range(0, len(y), len(verse_loop)):
-        beat_track[t:t+len(verse_loop)] += verse_loop[:min(len(verse_loop), len(y)-t)]
+        end = min(t + len(verse_loop), len(y))
+        beat_track[t:end] += verse_loop[:end - t]
 
-    # הוסף לופים מיוחדים לפזמון
-    for start, end in chorus_times:
+    for start, end_sec in chorus_times:
         start_i = int(start * sr)
-        end_i = int(end * sr)
+        end_i = int(end_sec * sr)
         for t in range(start_i, end_i, len(chorus_loop)):
-            beat_track[t:t+len(chorus_loop)] = chorus_loop[:min(len(chorus_loop), end_i - t)]
+            end_t = min(t + len(chorus_loop), end_i)
+            beat_track[t:end_t] = chorus_loop[:end_t - t]
 
-    # מיזוג השיר עם הלופ
-    combined = y + 0.5 * beat_track  # הנחתה כדי למנוע קליפינג
-
+    combined = y + 0.5 * beat_track
     out_path = "output/remixed.wav"
+    os.makedirs("output", exist_ok=True)
     sf.write(out_path, combined.astype(np.float32), sr)
     return out_path
 
