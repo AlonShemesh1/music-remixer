@@ -47,6 +47,10 @@ def remix_audio(song_path, style, chorus_segments):
         chorus_audio = np.tile(chorus_loop_audio, int(np.ceil(seg_len / len(chorus_loop_audio))))
         new_audio[s:e] = chorus_audio[:seg_len]
 
+    # Ensure output folder exists
+    os.makedirs("output", exist_ok=True)
+
     out_path = "output/remixed.wav"
-    sf.write(out_path, new_audio, sr)
+    sf.write(out_path, new_audio, sr, format='WAV')  # explicitly define format
     return out_path
+
