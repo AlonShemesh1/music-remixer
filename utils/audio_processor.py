@@ -25,27 +25,37 @@ def remix_audio(song_path, style, chorus_segments):
     duration = librosa.get_duration(y=y, sr=sr)
 
     # Select random loops
-    chorus_loop = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
-    chorus_loop_audio, _ = librosa.load(chorus_loop, sr=sr)
+    base_loop_path = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
+    chorus_loop_path = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
 
-    # Start with the original song
-    new_audio = y.copy()
+    base_loop, _ = librosa.load(base_loop_path, sr=sr)
+    chorus_loop, _ = librosa.load(chorus_loop_path, sr=sr)
 
-    # Replace chorus sections with loop
+    # Prepare loop overlays
+    loop_overlay = np.zeros_like(y)
+    for i in range(0, len(y), len(base_loop)):
+        segment = base_loop[:min(len(base_loop), len(y) - i)]
+        loop_overlay[i:i+len(segment)] += segment
+
+    # Add chorus loop on top during chorus segments
     for start, end in chorus_segments:
         s = int(start * sr)
         e = int(end * sr)
         seg_len = e - s
-        chorus_audio = np.tile(chorus_loop_audio, int(np.ceil(seg_len / len(chorus_loop_audio))))
-        new_audio[s:e] = chorus_audio[:seg_len]
+        chorus_audio = np.tile(chorus_loop, int(np.ceil(seg_len / len(chorus_loop))))[:seg_len]
+        loop_overlay[s:e] += chorus_audio
 
-    # Ensure output folder exists
-    os.makedirs("output", exist_ok=True)
+    # Combine original audio with loops
+    combined = y + loop_overlay
+
+    # Normalize to prevent clipping
+    max_amp = np.max(np.abs(combined))
+    if max_amp > 1.0:
+        combined = combined / max_amp
 
     out_path = "output/remixed.wav"
-    sf.write(out_path, new_audio, sr, format='WAV')
+    sf.write(out_path, combined, sr)
     return out_path
-
 
 def compute_volume_envelope_from_array(audio_array, sr):
     hop_length = 512
