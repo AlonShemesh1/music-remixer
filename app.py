@@ -1,3 +1,6 @@
+import sys
+sys.path.append("utils")  # מוסיף את תיקיית utils ל-Python path
+
 import streamlit as st
 import os
 import librosa.display
