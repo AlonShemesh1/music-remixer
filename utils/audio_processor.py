@@ -1,68 +1,51 @@
-import streamlit as st
-import os
-import random
 import librosa
-import librosa.display
-import matplotlib.pyplot as plt
 import numpy as np
-from pydub import AudioSegment
-from utils.audio_processor import (
-    get_chorus_intervals,
-    apply_loops_to_song,
-    get_volume_envelope,
-    save_audio
-)
+import soundfile as sf
+import random
+import os
 
-st.set_page_config(page_title="Music Remixer", layout="wide")
-st.title("🎧 Music Remixer")
+def get_chorus_intervals(audio_path):
+    y, sr = librosa.load(audio_path, mono=True)
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    similarity = librosa.segment.recurrence_matrix(chroma, mode='affinity')
+    path_sim = librosa.segment.path_enhance(similarity)
+    boundaries = librosa.segment.agglomerative(path_sim, k=4)
+    intervals = librosa.frames_to_time(boundaries, sr=sr)
+    return [(intervals[i], intervals[i+1]) for i in range(len(intervals)-1)]
 
-style = st.selectbox("Choose a remix style:", ["Hip-Hop", "Reggae", "Rock"])
+def compute_volume_envelope(audio_path):
+    y, sr = librosa.load(audio_path, mono=True)
+    hop_length = 512
+    envelope = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    times = librosa.frames_to_time(np.arange(len(envelope)), sr=sr, hop_length=hop_length)
+    return times, envelope
 
-uploaded_file = st.file_uploader("Upload a song (MP3 format)", type=["mp3"])
+def remix_audio(song_path, style, chorus_segments):
+    y, sr = librosa.load(song_path, mono=True)
+    duration = librosa.get_duration(y=y, sr=sr)
 
-if uploaded_file:
-    song_path = os.path.join("uploads", uploaded_file.name)
-    with open(song_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    # Select random loops
+    base_loop = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
+    chorus_loop = f'beats/{style}_loop_{random.randint(1, 4)}.mp3'
 
-    st.audio(song_path)
+    base_loop_audio, _ = librosa.load(base_loop, sr=sr)
+    chorus_loop_audio, _ = librosa.load(chorus_loop, sr=sr)
 
-    st.subheader("Original Volume Envelope")
-    original_env, sr = get_volume_envelope(song_path)
-    times = np.linspace(0, len(original_env)/sr, num=len(original_env))
-    chorus_times = get_chorus_intervals(song_path)
+    loop_duration = librosa.get_duration(y=base_loop_audio, sr=sr)
 
-    fig, ax = plt.subplots()
-    ax.plot(times, original_env, label='Volume')
-    for start, end in chorus_times:
-        ax.axvspan(start, end, color='red', alpha=0.3)
-    ax.set_title("Original Volume Envelope with Chorus Highlighted")
-    st.pyplot(fig)
+    # Build new remix
+    new_audio = np.zeros_like(y)
 
-    if st.button("Remix"):
-        with st.spinner("Remixing in progress..."):
-            loop_numbers = random.sample([1, 2, 3, 4], 2)
-            verse_loop_path = f"beats/{style.lower()}_loop_{loop_numbers[0]}.mp3"
-            chorus_loop_path = f"beats/{style.lower()}_loop_{loop_numbers[1]}.mp3"
+    for i in range(0, len(y), len(base_loop_audio)):
+        new_audio[i:i+len(base_loop_audio)] = base_loop_audio[:min(len(base_loop_audio), len(y)-i)]
 
-            output_path = apply_loops_to_song(
-                song_path,
-                verse_loop_path,
-                chorus_loop_path,
-                chorus_times
-            )
+    for start, end in chorus_segments:
+        s = int(start * sr)
+        e = int(end * sr)
+        seg_len = e - s
+        chorus_audio = np.tile(chorus_loop_audio, int(np.ceil(seg_len / len(chorus_loop_audio))))
+        new_audio[s:e] = chorus_audio[:seg_len]
 
-            st.subheader("Remixed Volume Envelope")
-            remixed_env, _ = get_volume_envelope(output_path)
-            remixed_times = np.linspace(0, len(remixed_env)/sr, num=len(remixed_env))
-            fig2, ax2 = plt.subplots()
-            ax2.plot(remixed_times, remixed_env, label='Volume')
-            for start, end in chorus_times:
-                ax2.axvspan(start, end, color='green', alpha=0.3)
-            ax2.set_title("Remixed Volume Envelope with Chorus Highlighted")
-            st.pyplot(fig2)
-
-            st.success("Remix complete!")
-            st.audio(output_path)
-            with open(output_path, "rb") as f:
-                st.download_button("Download Remixed Song", f, file_name="remixed_song.mp3")
+    out_path = "output/remixed.wav"
+    sf.write(out_path, new_audio, sr)
+    return out_path
