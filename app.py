@@ -1,8 +1,10 @@
 import streamlit as st
 import os
+import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 from utils.audio_processor import remix_audio, detect_chorus_intervals, get_volume_envelope
+import numpy as np
 
 st.set_page_config(page_title="Music Remixer", layout="centered")
 st.title("🎵 AI Music Remixer")
@@ -12,10 +14,8 @@ style = st.selectbox("Choose Remix Style", ["Hip-Hop", "Reggae", "Rock"])
 
 if st.button("Remix") and uploaded_file:
     with st.spinner("Processing..."):
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        song_path = os.path.join(upload_dir, uploaded_file.name)
-
+        os.makedirs("uploads", exist_ok=True)
+        song_path = os.path.join("uploads", uploaded_file.name)
         with open(song_path, "wb") as f:
             f.write(uploaded_file.read())
 
