@@ -3,16 +3,20 @@ import numpy as np
 import soundfile as sf
 import os
 import random
-from pydub import AudioSegment
 
 def detect_chorus_intervals(y, sr):
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity')
-    laplacian = librosa.segment.matrix_filter(recurrence, aggregate=np.median)
+    recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
+
+    # נשתמש בלפלסיאן ישירות בלי matrix_filter
+    laplacian = librosa.segment.linalg.laplacian(recurrence, norm=True)
+
     _, segments = librosa.segment.agglomerative(laplacian, k=4)
     segments = np.pad(segments, (0, 1), mode='constant', constant_values=chroma.shape[1])
     times = librosa.frames_to_time(segments, sr=sr)
     intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
+
+    # נניח שהחלק הארוך ביותר הוא הפזמון
     chorus = max(intervals, key=lambda x: x[1] - x[0])
     return [chorus]
 
@@ -22,20 +26,19 @@ def remix_audio(song_path, style, chorus_times):
     y, sr = librosa.load(song_path, sr=None)
     duration = librosa.get_duration(y=y, sr=sr)
 
-    # חפש לופים תואמים לסגנון
     beat_folder = "beats"
     beat_files = [f for f in os.listdir(beat_folder)
                   if f.lower().startswith(style.lower()) and f.endswith(".mp3")]
     if len(beat_files) < 2:
-        raise ValueError(f"You must have at least 2 loops for style {style} in MP3 format.")
+        raise ValueError(f"You must have at least 2 MP3 loops for style '{style}' in the 'beats' folder.")
 
     selected = random.sample(beat_files, 2)
     verse_loop_path = os.path.join(beat_folder, selected[0])
     chorus_loop_path = os.path.join(beat_folder, selected[1])
 
-    # המרה ל־librosa בפורמט WAV
-    verse_loop = librosa.load(verse_loop_path, sr=sr)[0]
-    chorus_loop = librosa.load(chorus_loop_path, sr=sr)[0]
+    # Load loops
+    verse_loop, _ = librosa.load(verse_loop_path, sr=sr)
+    chorus_loop, _ = librosa.load(chorus_loop_path, sr=sr)
 
     beat_track = np.zeros_like(y)
     for t in range(0, len(y), len(verse_loop)):
