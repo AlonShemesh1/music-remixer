@@ -1,20 +1,27 @@
-import librosa
-import numpy as np
 import os
 import random
+import librosa
+import numpy as np
 import soundfile as sf
+from scipy.sparse import csgraph
 
-def get_volume_envelope(y, sr, frame_size=2048, hop_length=512):
-    rms = librosa.feature.rms(y=y, frame_length=frame_size, hop_length=hop_length)[0]
-    return rms
+def get_volume_envelope(y, frame_size=2048, hop_size=512):
+    envelope = []
+    for i in range(0, len(y), hop_size):
+        frame = y[i:i+frame_size]
+        envelope.append(np.sqrt(np.mean(frame**2)))
+    return np.array(envelope)
 
 def detect_chorus_intervals(y, sr):
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
-    laplacian = librosa.segment.laplacian(recurrence, norm=True)
+    
+    # מחשבים Laplacian באמצעות scipy
+    laplacian = csgraph.laplacian(recurrence, normed=True)
+    
+    # מבצעים clustering
     segments = librosa.segment.agglomerative(laplacian, k=4)
-
     boundaries = np.flatnonzero(np.diff(segments)) * (512 / sr)
     boundaries = np.concatenate([[0], boundaries, [len(y) / sr]])
 
@@ -24,43 +31,44 @@ def detect_chorus_intervals(y, sr):
     chorus_end = boundaries[max_idx + 1]
     return [(chorus_start, chorus_end)]
 
-def remix_audio(input_path, style, chorus_intervals):
-    y, sr = librosa.load(input_path, sr=None)
-
+def remix_audio(song_path, style, chorus_times):
+    y, sr = librosa.load(song_path, sr=None)
     beat_folder = "beats"
-    all_beats = [f for f in os.listdir(beat_folder) if f.endswith(".mp3") and style.lower() in f.lower()]
-    if len(all_beats) < 2:
-        raise ValueError("At least 2 beats per style required.")
 
-    selected_beats = random.sample(all_beats, 2)
-    verse_loop, chorus_loop = [librosa.load(os.path.join(beat_folder, b), sr=sr)[0] for b in selected_beats]
+    if not os.path.exists(beat_folder):
+        raise FileNotFoundError(f"Directory {beat_folder} not found.")
 
-    output = np.array([], dtype=np.float32)
-    last = 0
+    # לוקחים את כל הקבצים הרלוונטיים לסגנון
+    beat_files = [f for f in os.listdir(beat_folder) 
+                  if f.lower().endswith(".mp3") and style.lower() in f.lower()]
+    
+    if len(beat_files) < 2:
+        raise ValueError(f"Need at least 2 beat files for style '{style}'.")
 
-    for start, end in chorus_intervals:
-        start_sample = int(start * sr)
-        end_sample = int(end * sr)
+    # בוחרים שניים רנדומליים – אחד לבית ואחד לפזמון
+    verse_loop_file, chorus_loop_file = random.sample(beat_files, 2)
+    verse_loop, _ = librosa.load(os.path.join(beat_folder, verse_loop_file), sr=sr)
+    chorus_loop, _ = librosa.load(os.path.join(beat_folder, chorus_loop_file), sr=sr)
 
-        verse_part = y[last:start_sample]
-        chorus_part = y[start_sample:end_sample]
+    chorus_start, chorus_end = chorus_times[0]
+    chorus_start_sample = int(chorus_start * sr)
+    chorus_end_sample = int(chorus_end * sr)
 
-        # Loop the selected beats to match durations
-        verse_repeated = np.tile(verse_loop, int(np.ceil(len(verse_part) / len(verse_loop))))[:len(verse_part)]
-        chorus_repeated = np.tile(chorus_loop, int(np.ceil(len(chorus_part) / len(chorus_loop))))[:len(chorus_part)]
+    before_chorus = y[:chorus_start_sample]
+    chorus = y[chorus_start_sample:chorus_end_sample]
+    after_chorus = y[chorus_end_sample:]
 
-        mixed_verse = 0.5 * verse_part + 0.5 * verse_repeated
-        mixed_chorus = 0.5 * chorus_part + 0.5 * chorus_repeated
+    # יוצרים רמיקס על ידי overlay של הלופים על השיר
+    def apply_loop(section, loop):
+        loop = np.tile(loop, int(np.ceil(len(section) / len(loop))))
+        loop = loop[:len(section)]
+        return 0.6 * section + 0.4 * loop[:len(section)]
 
-        output = np.concatenate((output, mixed_verse, mixed_chorus))
-        last = end_sample
+    before_remixed = apply_loop(before_chorus, verse_loop)
+    chorus_remixed = apply_loop(chorus, chorus_loop)
+    after_remixed = apply_loop(after_chorus, verse_loop)
 
-    if last < len(y):
-        verse_part = y[last:]
-        verse_repeated = np.tile(verse_loop, int(np.ceil(len(verse_part) / len(verse_loop))))[:len(verse_part)]
-        mixed_verse = 0.5 * verse_part + 0.5 * verse_repeated
-        output = np.concatenate((output, mixed_verse))
-
-    out_path = "remixed_output.wav"
-    sf.write(out_path, output, sr)
+    combined = np.concatenate([before_remixed, chorus_remixed, after_remixed])
+    out_path = "output_remix.wav"
+    sf.write(out_path, combined, sr)
     return out_path
