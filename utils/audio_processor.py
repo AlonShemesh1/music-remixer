@@ -8,9 +8,11 @@ def detect_chorus_intervals(y, sr):
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     recurrence = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
 
-    # נשתמש בלפלסיאן ישירות בלי matrix_filter
-    laplacian = librosa.segment.linalg.laplacian(recurrence, norm=True)
+    # יצירת לפלסיאן בצורה ידנית
+    D = np.diag(np.sum(recurrence, axis=1))
+    laplacian = librosa.util.normalize(D - recurrence)
 
+    # אגרגציה לאשכולות
     _, segments = librosa.segment.agglomerative(laplacian, k=4)
     segments = np.pad(segments, (0, 1), mode='constant', constant_values=chroma.shape[1])
     times = librosa.frames_to_time(segments, sr=sr)
