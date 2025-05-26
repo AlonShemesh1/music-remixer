@@ -38,14 +38,15 @@ def remix_audio(song_path, style, chorus_times):
     if not os.path.exists(beat_folder):
         raise FileNotFoundError(f"Directory {beat_folder} not found.")
 
-    # לוקחים את כל הקבצים הרלוונטיים לסגנון
+    # Normalize style string to match filenames
+    style_prefix = style.lower().replace("-", "").replace(" ", "")
     beat_files = [f for f in os.listdir(beat_folder) 
-                  if f.lower().endswith(".mp3") and style.lower() in f.lower()]
+                  if f.lower().endswith(".mp3") and style_prefix in f.lower()]
     
     if len(beat_files) < 2:
         raise ValueError(f"Need at least 2 beat files for style '{style}'.")
 
-    # בוחרים שניים רנדומליים – אחד לבית ואחד לפזמון
+    # Pick 2 random loops: one for verse, one for chorus
     verse_loop_file, chorus_loop_file = random.sample(beat_files, 2)
     verse_loop, _ = librosa.load(os.path.join(beat_folder, verse_loop_file), sr=sr)
     chorus_loop, _ = librosa.load(os.path.join(beat_folder, chorus_loop_file), sr=sr)
@@ -58,7 +59,6 @@ def remix_audio(song_path, style, chorus_times):
     chorus = y[chorus_start_sample:chorus_end_sample]
     after_chorus = y[chorus_end_sample:]
 
-    # יוצרים רמיקס על ידי overlay של הלופים על השיר
     def apply_loop(section, loop):
         loop = np.tile(loop, int(np.ceil(len(section) / len(loop))))
         loop = loop[:len(section)]
@@ -72,3 +72,4 @@ def remix_audio(song_path, style, chorus_times):
     out_path = "output_remix.wav"
     sf.write(out_path, combined, sr)
     return out_path
+
